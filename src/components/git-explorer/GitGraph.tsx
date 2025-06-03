@@ -1,0 +1,103 @@
+"use client";
+
+import type { BranchType, CommitType, Edge, PositionedCommit } from '@/types/git';
+import { CommitNode } from './CommitNode';
+import { BranchLabel } from './BranchLabel';
+import React from 'react';
+
+interface GitGraphProps {
+  commits: Record<string, CommitType>;
+  branches: Record<string, BranchType>;
+  positionedCommits: PositionedCommit[];
+  edges: Edge[];
+  selectedCommitId: string | null;
+  selectedBranchName: string | null;
+  onCommitSelect: (commitId: string) => void;
+  onBranchSelect: (branchName: string) => void;
+  height: number;
+  width: number;
+}
+
+const ARROW_MARKER_ID = "arrow-marker";
+
+export function GitGraph({
+  commits,
+  branches,
+  positionedCommits,
+  edges,
+  selectedCommitId,
+  selectedBranchName,
+  onCommitSelect,
+  onBranchSelect,
+  height,
+  width,
+}: GitGraphProps) {
+  if (!positionedCommits.length) {
+    return <div className="text-center p-8 text-muted-foreground">No commits to display.</div>;
+  }
+  
+  const headCommitsByBranch = Object.fromEntries(
+    Object.values(branches).map(b => [b.name, b.headCommitId])
+  );
+  const commitIsBranchHead = (commitId: string) => Object.values(headCommitsByBranch).includes(commitId);
+
+  return (
+    <div className="w-full h-full overflow-auto border rounded-md shadow-lg bg-card">
+      <svg width={width} height={height} className="min-w-full min-h-full">
+        <defs>
+          <marker
+            id={ARROW_MARKER_ID}
+            markerWidth="10"
+            markerHeight="7"
+            refX="10" 
+            refY="3.5"
+            orient="auto"
+          >
+            <polygon points="0 0, 10 3.5, 0 7" className="fill-primary" />
+          </marker>
+        </defs>
+        <g>
+          {edges.map((edge, index) => (
+            <line
+              key={`edge-${index}`}
+              x1={edge.from.x}
+              y1={edge.from.y}
+              x2={edge.to.x}
+              y2={edge.to.y}
+              className="stroke-primary/70 transition-all duration-300"
+              strokeWidth="2"
+              markerEnd={`url(#${ARROW_MARKER_ID})`}
+            />
+          ))}
+        </g>
+        <g>
+          {positionedCommits.map((commit) => (
+            <CommitNode
+              key={commit.id}
+              commit={commit}
+              isSelected={selectedCommitId === commit.id}
+              isBranchHead={commitIsBranchHead(commit.id)}
+              isCurrentBranchHead={selectedBranchName ? branches[selectedBranchName]?.headCommitId === commit.id : false}
+              onSelect={onCommitSelect}
+            />
+          ))}
+        </g>
+        <g>
+          {Object.values(branches).map((branch) => {
+            const headCommit = positionedCommits.find(c => c.id === branch.headCommitId);
+            if (!headCommit) return null;
+            return (
+              <BranchLabel
+                key={branch.name}
+                branch={branch}
+                headCommitPosition={{ x: headCommit.x, y: headCommit.y }}
+                isSelected={selectedBranchName === branch.name}
+                onSelect={onBranchSelect}
+              />
+            );
+          })}
+        </g>
+      </svg>
+    </div>
+  );
+}
