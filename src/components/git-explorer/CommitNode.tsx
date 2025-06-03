@@ -22,7 +22,7 @@ export function CommitNode({ commit, isSelected, isBranchHead, isCurrentBranchHe
   const [isBeingDraggedOver, setIsBeingDraggedOver] = useState(false);
 
   const fillColor = isCurrentBranchHead ? 'fill-accent' : (isBranchHead ? 'fill-primary' : 'fill-secondary');
-  
+
   let strokeColorClass = isSelected ? 'stroke-accent' : 'stroke-primary';
   let currentStrokeWidth = isSelected ? SELECTED_STROKE_WIDTH : 1;
 
@@ -43,9 +43,10 @@ export function CommitNode({ commit, isSelected, isBranchHead, isCurrentBranchHe
 
   const handleDragEnter = (event: React.DragEvent<SVGGElement>) => {
     event.preventDefault();
-    // Check if the dragged item is another commit and not itself
-    const draggedCommitId = event.dataTransfer.types.includes('application/x-git-commit-id') ? event.dataTransfer.getData('application/x-git-commit-id') : null;
-    if (commit.id !== draggedCommitId) { // Cannot drop on itself
+    // Check if the dragged item is of the correct type.
+    // Note: event.dataTransfer.getData() is not reliably available here.
+    // We rely on the type check. Actual prevention of self-drop is in handleDrop.
+    if (event.dataTransfer.types.includes('application/x-git-commit-id')) {
       setIsBeingDraggedOver(true);
     }
   };
@@ -61,8 +62,13 @@ export function CommitNode({ commit, isSelected, isBranchHead, isCurrentBranchHe
     const draggedCommitId = event.dataTransfer.getData('application/x-git-commit-id');
     const targetParentId = commit.id;
 
+    // Prevent dropping on itself, and ensure draggedCommitId is valid
     if (draggedCommitId && draggedCommitId !== targetParentId) {
       onCommitDrop(draggedCommitId, targetParentId);
+    } else if (draggedCommitId === targetParentId) {
+      // Optionally, provide feedback or log if dropping on self is attempted,
+      // but the parent's onCommitDrop should also handle this logic (e.g., via toast).
+      console.warn("Attempted to drop a commit on itself.");
     }
   };
 
