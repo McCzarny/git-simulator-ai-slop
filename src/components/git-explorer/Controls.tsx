@@ -1,3 +1,4 @@
+
 "use client";
 
 import { Button } from '@/components/ui/button';
@@ -17,7 +18,7 @@ interface ControlsProps {
   commits: Record<string, CommitType>;
   onAddCommit: () => void;
   onCreateBranch: () => void;
-  onMoveCommit: (targetParentId: string) => void;
+  onMoveCommit: (commitToMoveId: string, targetParentId: string) => void; // Updated signature
   isMoveModeActive: boolean;
   toggleMoveMode: () => void;
 }
@@ -34,22 +35,24 @@ export function Controls({
 }: ControlsProps) {
   
   const handleMoveTargetSelect = (targetParentId: string) => {
-    if(targetParentId === selectedCommitId){
-      // Show a toast or alert: Cannot move commit onto itself.
-      // This should be handled by a toast message in the parent component.
+    if (!selectedCommitId) {
+      // This should ideally not happen if move mode is active correctly
       return;
     }
-    onMoveCommit(targetParentId);
+    if(targetParentId === selectedCommitId){
+      // Toast is handled by parent
+      return;
+    }
+    onMoveCommit(selectedCommitId, targetParentId); // Use selectedCommitId as the source
   };
   
   const availableCommitsForMove = Object.values(commits).filter(c => c.id !== selectedCommitId);
-
 
   return (
     <Card className="p-4 shadow-md">
       <CardHeader>
         <CardTitle>Git Actions</CardTitle>
-        <CardDescription>Perform operations on the Git graph.</CardDescription>
+        <CardDescription>Perform operations on the Git graph. You can also drag-and-drop commits to move them.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="flex flex-wrap gap-2">
@@ -71,9 +74,9 @@ export function Controls({
           </Button>
           <Button
             onClick={toggleMoveMode}
-            disabled={!selectedCommitId}
+            disabled={!selectedCommitId} // Disable if no commit is selected to initiate move
             variant={isMoveModeActive ? "destructive" : "outline"}
-            aria-label={isMoveModeActive ? "Cancel Move Commit" : "Initiate Move Commit"}
+            aria-label={isMoveModeActive ? "Cancel Move Commit (or use drag-and-drop)" : "Initiate Move Commit (or use drag-and-drop)"}
           >
             <MoveIcon className="mr-2 h-4 w-4" /> {isMoveModeActive ? 'Cancel Move' : 'Move Commit'}
           </Button>
@@ -85,7 +88,7 @@ export function Controls({
               <AlertTriangle className="inline mr-2 h-4 w-4 text-amber-500" />
               Moving commit: <span className="font-bold">{commits[selectedCommitId]?.message.substring(0,8)}</span>. Select new parent:
             </p>
-            <Select onValueChange={handleMoveTargetSelect} disabled={availableCommitsForMove.length === 0}>
+            <Select onValueChange={handleMoveTargetSelect} disabled={availableCommitsForMove.length === 0 || !selectedCommitId}>
               <SelectTrigger className="w-full">
                 <SelectValue placeholder="Select target parent commit..." />
               </SelectTrigger>
@@ -101,7 +104,7 @@ export function Controls({
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground mt-2">
-              Note: Moving commits can simplify or alter history. This is a basic re-parenting operation.
+              Note: Moving commits can simplify or alter history. This is a basic re-parenting operation. Alternatively, try dragging the commit.
             </p>
           </div>
         )}
@@ -115,5 +118,4 @@ export function Controls({
   );
 }
 
-// Need to import Card components if not already globally available
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";

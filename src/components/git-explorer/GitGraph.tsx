@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { BranchType, CommitType, Edge, PositionedCommit } from '@/types/git';
@@ -14,6 +15,7 @@ interface GitGraphProps {
   selectedBranchName: string | null;
   onCommitSelect: (commitId: string) => void;
   onBranchSelect: (branchName: string) => void;
+  onCommitDrop: (draggedCommitId: string, targetParentId: string) => void; // New prop
   height: number;
   width: number;
 }
@@ -29,6 +31,7 @@ export function GitGraph({
   selectedBranchName,
   onCommitSelect,
   onBranchSelect,
+  onCommitDrop, // Destructure new prop
   height,
   width,
 }: GitGraphProps) {
@@ -79,6 +82,7 @@ export function GitGraph({
               isBranchHead={commitIsBranchHead(commit.id)}
               isCurrentBranchHead={selectedBranchName ? branches[selectedBranchName]?.headCommitId === commit.id : false}
               onSelect={onCommitSelect}
+              onCommitDrop={onCommitDrop} // Pass down the handler
             />
           ))}
         </g>
