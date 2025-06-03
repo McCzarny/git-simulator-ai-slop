@@ -14,11 +14,13 @@ const Y_SPACING = 80;
 const GRAPH_PADDING = 50;
 
 function calculateLayout(
-  commitsMap: Record<string, CommitType>,
-  branchesMap: Record<string, BranchType>
+  commitsInput: Readonly<Record<string, CommitType>>,
+  branchesInput: Readonly<Record<string, BranchType>> // Keep for potential future use, currently not directly used for positioning
 ): { positionedCommits: PositionedCommit[]; edges: Edge[]; graphWidth: number; graphHeight: number } {
   const positionedCommits: PositionedCommit[] = [];
   const edges: Edge[] = [];
+
+  const commitsMap = { ...commitsInput }; // Work with a copy
 
   if (Object.keys(commitsMap).length === 0) {
     return { positionedCommits, edges, graphWidth: GRAPH_PADDING * 2, graphHeight: GRAPH_PADDING * 2 };
@@ -37,27 +39,36 @@ function calculateLayout(
 
   const tempPositionedCommitsMap: Record<string, PositionedCommit> = {};
 
-  for (const commit of sortedCommits) {
-    const x = (commit.branchLane || 0) * X_SPACING + GRAPH_PADDING;
-    const y = commit.depth * Y_SPACING + GRAPH_PADDING;
-    const positionedCommit = { ...commit, x, y };
+  // First pass: calculate positions and populate tempPositionedCommitsMap
+  for (const commitData of sortedCommits) { // commitData is of type CommitType
+    const xPos = (commitData.branchLane || 0) * X_SPACING + GRAPH_PADDING;
+    const yPos = commitData.depth * Y_SPACING + GRAPH_PADDING;
+    
+    const positionedCommit: PositionedCommit = { 
+      ...commitData, // Spreads all properties of CommitType
+      x: xPos, 
+      y: yPos 
+    };
     positionedCommits.push(positionedCommit);
-    tempPositionedCommitsMap[commit.id] = positionedCommit;
+    tempPositionedCommitsMap[commitData.id] = positionedCommit;
 
-    maxX = Math.max(maxX, x);
-    maxY = Math.max(maxY, y);
+    maxX = Math.max(maxX, xPos);
+    maxY = Math.max(maxY, yPos);
   }
   
-  for (const positionedCommit of positionedCommits) {
-    positionedCommit.parentIds.forEach(parentId => {
-      const parentFromMap = tempPositionedCommitsMap[parentId] || 
-                           (commitsMap[parentId] ? 
-                            { ...commitsMap[parentId], 
-                              x: (commitsMap[parentId].branchLane || 0) * X_SPACING + GRAPH_PADDING, 
-                              y: commitsMap[parentId].depth * Y_SPACING + GRAPH_PADDING 
-                            } : null);
-      if (parentFromMap) {
-        edges.push({ from: positionedCommit, to: parentFromMap });
+  // Second pass: create edges using tempPositionedCommitsMap for lookups
+  for (const currentPositionedCommit of positionedCommits) {
+    currentPositionedCommit.parentIds.forEach(parentId => {
+      const parentPositionedCommit = tempPositionedCommitsMap[parentId];
+      // Parent should always be in tempPositionedCommitsMap due to sorting by depth (parents usually have lower depth)
+      // or if not, it implies a graph structure not perfectly handled by simple depth sort (e.g. complex merges not yet supported)
+      if (parentPositionedCommit) {
+        edges.push({ from: currentPositionedCommit, to: parentPositionedCommit });
+      } else if (commitsMap[parentId]) {
+        // Fallback: if parent commit data exists but wasn't positioned (highly unlikely with current sort)
+        // This indicates a potential issue in sorting or graph structure complexity not fully handled.
+        // For robustness, we could try to position it here, but it's better to ensure sorting is correct.
+        // console.warn(`Parent commit ${parentId} not found in tempPositionedCommitsMap for child ${currentPositionedCommit.id}`);
       }
     });
   }
@@ -65,8 +76,8 @@ function calculateLayout(
   return {
     positionedCommits,
     edges,
-    graphWidth: maxX + X_SPACING,
-    graphHeight: maxY + Y_SPACING,
+    graphWidth: maxX + X_SPACING, // Add padding for the last node
+    graphHeight: maxY + Y_SPACING, // Add padding for the last node
   };
 }
 
@@ -79,13 +90,13 @@ export default function GitExplorerView() {
   
   const [nextCommitIdx, setNextCommitIdx] = useState(0);
   const [nextBranchNumber, setNextBranchNumber] = useState(STARTING_BRANCH_NUMBER);
-  const [nextLaneIdx, setNextLaneIdx] = useState(1); 
+  const [nextLaneIdx, setNextLaneIdx] = useState(1); // Lane 0 is for master/main
 
   const [isMoveModeActive, setIsMoveModeActive] = useState(false);
 
   useEffect(() => {
     const initialCommitId = `commit-${nextCommitIdx}`;
-    const initialCommit: CommitType = {
+    const initialCommit: CommitType = { // No x, y here
       id: initialCommitId,
       parentIds: [],
       message: `Initial commit`,
@@ -119,7 +130,7 @@ export default function GitExplorerView() {
     }
 
     const newCommitId = `commit-${nextCommitIdx}`;
-    const newCommit: CommitType = {
+    const newCommit: CommitType = { // No x, y here
       id: newCommitId,
       parentIds: [parentCommit.id],
       message: `Commit ${nextCommitIdx}`,
@@ -144,39 +155,40 @@ export default function GitExplorerView() {
       return;
     }
 
-    const parentCommit = commits[selectedCommitId];
-    const newBranchName = `${nextBranchNumber}`;
+    const parentCommitForBranch = commits[selectedCommitId];
+    const newBranchName = `${nextBranchNumber}`; // Using number as name for simplicity
     const newBranchLane = nextLaneIdx;
 
-    const newBranch: BranchType = {
+    const newBranchDef: BranchType = {
       name: newBranchName,
-      headCommitId: selectedCommitId, // Branch head is the selected commit by default
+      headCommitId: selectedCommitId, 
       lane: newBranchLane,
     };
     
-    // Optionally, create a new commit on this new branch immediately
     const newCommitId = `commit-${nextCommitIdx}`;
-    const newBranchInitialCommit: CommitType = {
+    const newBranchInitialCommit: CommitType = { // No x, y here
         id: newCommitId,
-        parentIds: [selectedCommitId], // Parent is the commit the branch was created from
+        parentIds: [selectedCommitId],
         message: `Commit ${nextCommitIdx} (on ${newBranchName})`,
         timestamp: Date.now(),
-        branchLane: newBranchLane,
-        depth: parentCommit.depth + 1,
+        branchLane: newBranchLane, 
+        depth: parentCommitForBranch.depth + 1,
     };
 
-    setCommits(prev => ({ ...prev, [newCommitId]: newBranchInitialCommit }));
-    setBranches(prev => ({
-      ...prev,
-      [newBranchName]: { ...newBranch, headCommitId: newCommitId }, // New branch head is the new commit
+    setCommits(prevCommits => ({ ...prevCommits, [newCommitId]: newBranchInitialCommit }));
+    setBranches(prevBranches => ({
+      ...prevBranches,
+      [newBranchName]: { ...newBranchDef, headCommitId: newCommitId }, 
     }));
+    
     setSelectedBranchName(newBranchName); 
-    setSelectedCommitId(newCommitId); // Select the new commit
+    setSelectedCommitId(newCommitId); 
     setNextCommitIdx(prev => prev + 1);
     setNextBranchNumber(prev => prev + 1);
     setNextLaneIdx(prev => prev + 1); 
-    toast({ title: "Branch Created", description: `Branch ${newBranchName} created from commit ${parentCommit.message.substring(0,8)}.` });
+    toast({ title: "Branch Created", description: `Branch ${newBranchName} created from ${parentCommitForBranch.message.substring(0,8)}. New commit ${newCommitId} added to ${newBranchName}.` });
   }, [selectedCommitId, commits, nextCommitIdx, nextBranchNumber, nextLaneIdx, toast]);
+
 
   const handleSelectCommit = useCallback((commitId: string) => {
     setSelectedCommitId(commitId);
@@ -200,7 +212,7 @@ export default function GitExplorerView() {
   }, [selectedCommitId, isMoveModeActive, toast]);
 
   const handleMoveCommit = useCallback((commitToMoveId: string, newParentId: string) => {
-    const currentCommits = {...commits}; 
+    const currentCommits = commits; 
 
     if (!currentCommits[commitToMoveId] || !currentCommits[newParentId]) {
       toast({ title: "Error", description: "Invalid commit for move operation.", variant: "destructive"});
@@ -212,23 +224,31 @@ export default function GitExplorerView() {
       setIsMoveModeActive(false);
       return;
     }
-
-    const isAncestor = (potentialAncestorId: string, commitId: string, graph: Record<string, CommitType>): boolean => {
-        let currentId: string | undefined = commitId;
-        const visited = new Set<string>();
-        while(currentId && graph[currentId]) {
-            if(visited.has(currentId)) return true; // Cycle detected in parent lookup path
-            visited.add(currentId);
-            if (currentId === potentialAncestorId) return true; // Found the ancestor
-            // Check all parents; for this check, any path is sufficient.
-            // For simplicity, we usually assume first parent in parentIds, but a full check would iterate parents.
-            currentId = graph[currentId].parentIds.length > 0 ? graph[currentId].parentIds[0] : undefined;
-        }
-        return false;
-    };
     
-    if (isAncestor(commitToMoveId, newParentId, currentCommits)) {
-         toast({ title: "Error", description: "Cannot move commit: creates a cycle.", variant: "destructive"});
+    // Cycle detection: Check if newParentId is a descendant of commitToMoveId
+    let isCyclic = false;
+    const q_descendants: string[] = [commitToMoveId];
+    const visited_descendants = new Set<string>();
+    visited_descendants.add(commitToMoveId);
+    let head_desc = 0;
+    while(head_desc < q_descendants.length) {
+        const current_ancestor = q_descendants[head_desc++];
+        if (current_ancestor === newParentId) {
+            isCyclic = true;
+            break;
+        }
+        for (const cid in currentCommits) {
+            if (currentCommits[cid].parentIds.includes(current_ancestor)) {
+                if (!visited_descendants.has(cid)) {
+                    visited_descendants.add(cid);
+                    q_descendants.push(cid);
+                }
+            }
+        }
+    }
+
+    if (isCyclic) {
+         toast({ title: "Error", description: "Cannot move commit: creates a cycle. The target parent cannot be a descendant of the commit being moved.", variant: "destructive"});
          setIsMoveModeActive(false);
          return;
     }
@@ -236,74 +256,43 @@ export default function GitExplorerView() {
     const sourceCommit = currentCommits[commitToMoveId];
     const targetParentCommit = currentCommits[newParentId];
     
-    const newCommitsState = { ...currentCommits };
+    const newCommitsState: Record<string, CommitType> = { ...currentCommits };
 
-    // Update the moved commit
     newCommitsState[commitToMoveId] = {
-      ...sourceCommit,
+      ...sourceCommit, // Spreads CommitType properties (id, message, etc.)
       parentIds: [newParentId],
       depth: targetParentCommit.depth + 1,
       branchLane: targetParentCommit.branchLane, 
-      timestamp: Date.now(), // Update timestamp to reflect the change
+      timestamp: Date.now(), 
     };
     
-    // BFS to update depths and lanes of all descendants of the moved commit
     const queue: string[] = [commitToMoveId];
-    const visitedInBFS = new Set<string>(); // Tracks nodes that have been added to the queue
-    visitedInBFS.add(commitToMoveId);
-
+    const visitedInBFS = new Set<string>([commitToMoveId]); // Should be just commitToMoveId initially
     let head = 0;
+
     while (head < queue.length) {
         const currentAncestorId = queue[head++];
         const ancestorCommitData = newCommitsState[currentAncestorId];
 
-        // Find all commits that list currentAncestorId as a parent
         for (const commitId in newCommitsState) {
-            const potentialChild = newCommitsState[commitId];
-            if (potentialChild.parentIds.includes(currentAncestorId)) {
-                if (!visitedInBFS.has(potentialChild.id)) {
-                    newCommitsState[potentialChild.id] = {
-                        ...potentialChild,
+            // Check if commitId is a child of currentAncestorId
+            // Ensure we are looking at the version from newCommitsState for parentIds check
+            if (newCommitsState[commitId].parentIds.includes(currentAncestorId) && commitId !== currentAncestorId) {
+                 // Check if it's already processed or part of the original moved commit's old subtree path
+                if (!visitedInBFS.has(commitId)) {
+                    newCommitsState[commitId] = {
+                        ...newCommitsState[commitId], // Spread existing data of the child
                         depth: ancestorCommitData.depth + 1,
                         branchLane: ancestorCommitData.branchLane,
-                        timestamp: Date.now() + (head * 10) // Stagger timestamps slightly for tie-breaking
+                        timestamp: Date.now() + (head * 10) 
                     };
-                    visitedInBFS.add(potentialChild.id);
-                    queue.push(potentialChild.id);
-                } else {
-                    // If already visited, it might be a child of another node from the moved subtree.
-                    // Re-check and update if necessary (e.g. if path provides different depth/lane, though unlikely for simple reparenting)
-                    // For simplicity, the first update via BFS usually suffices for tree structures.
-                    // However, ensuring consistency:
-                     newCommitsState[potentialChild.id] = {
-                        ...newCommitsState[potentialChild.id], // use the current state from newCommitsState
-                        depth: Math.max(newCommitsState[potentialChild.id].depth, ancestorCommitData.depth + 1), // Take max depth if multiple paths
-                        branchLane: ancestorCommitData.branchLane, // Lane usually follows parent
-                        // Timestamp update could be more complex if truly merging paths
-                    };
+                    visitedInBFS.add(commitId);
+                    queue.push(commitId);
                 }
             }
         }
     }
-
     setCommits(newCommitsState);
-    // Update branch heads if the moved commit was a head or made another commit a head
-    const newBranchesState = { ...branches };
-    let branchModified = false;
-    for (const branchName in newBranchesState) {
-        const branch = newBranchesState[branchName];
-        // If moved commit was a branch head, the branch head needs to be its new parent (or stay if it has no new children)
-        // This logic might need refinement depending on desired git rebase/cherry-pick like behavior.
-        // For simple re-parenting, if a head is moved, its original branch might point to its new parent or become orphaned.
-        // A simpler model: if a commit moves, its branch head status doesn't automatically change.
-        // However, if commitToMoveId was a head, its old branch might now point to newParentId if that's logical,
-        // or the branch effectively "moves" with the commit.
-        // Let's assume for now branch heads are not automatically re-assigned by move, but this might be a future enhancement.
-    }
-    if (branchModified) {
-        setBranches(newBranchesState);
-    }
-
     setIsMoveModeActive(false);
     toast({ title: "Commit Moved", description: `Commit ${sourceCommit.message.substring(0,8)} re-parented to ${targetParentCommit.message.substring(0,8)}.`});
 
@@ -311,6 +300,7 @@ export default function GitExplorerView() {
 
 
   const { positionedCommits, edges, graphWidth, graphHeight } = useMemo(() => {
+    // Ensure commits and branches are treated as immutable for useMemo dependency
     return calculateLayout(commits, branches);
   }, [commits, branches]);
 
@@ -322,7 +312,7 @@ export default function GitExplorerView() {
       <Controls
         selectedBranchName={selectedBranchName}
         selectedCommitId={selectedCommitId}
-        commits={commits}
+        commits={commits} // Pass original commits map
         onAddCommit={handleAddCommit}
         onCreateBranch={handleCreateBranch}
         onMoveCommit={handleMoveCommit}
@@ -331,9 +321,9 @@ export default function GitExplorerView() {
       />
       <main className="flex-grow">
         <GitGraph
-          commits={commits}
+          commits={commits} // Pass original commits map for any potential lookups if needed
           branches={branches}
-          positionedCommits={positionedCommits}
+          positionedCommits={positionedCommits} // These are the ones with x,y for rendering
           edges={edges}
           selectedCommitId={selectedCommitId}
           selectedBranchName={selectedBranchName}
@@ -350,5 +340,3 @@ export default function GitExplorerView() {
     </div>
   );
 }
-
-    
