@@ -461,7 +461,7 @@ export default function GitExplorerView() {
     }
 
     const result = performGitActionAndUpdateLayout((draftCommits, draftBranches) => {
-      const newBranchName = `${localNextBranchNumber}-custom`;
+      const newBranchName = `custom`;
 
       let tempParentId = selectedCommitId;
       let tempParentDepth = parentCommitForBranch.depth;
@@ -496,7 +496,6 @@ export default function GitExplorerView() {
     setSelectedBranchName(result.newBranchName);
     setSelectedCommitId(result.headOfCustomCommits);
     setNextCommitIdx(result.updatedNextCommitIdx);
-    setNextBranchNumber(prev => prev + 1);
     toast({ title: "Customisations Applied", description: `Branch ${result.newBranchName} created with 4 custom commits. Layout updated.` });
   }, [selectedCommitId, commits, branches, nextCommitIdx, nextBranchNumber, toast, performGitActionAndUpdateLayout, getNewTimestamp]);
 
