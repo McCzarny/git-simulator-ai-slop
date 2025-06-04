@@ -139,33 +139,32 @@ export default function GitExplorerView() {
     };
     currentLane++;
 
-    // --- BRANCH 134 ---
-    const branch134Name = '134';
-    const parentForBranch134 = initialCommits[masterCommitsIds[2]]; // 3rd commit on master (index 2)
-    let parentCommitIdBranch134 = parentForBranch134.id;
-    let currentDepthBranch134 = parentForBranch134.depth + 1;
-    const branch134Lane = currentLane;
+    // --- BRANCH 139 ---
+    const branch139Name = '139';
+    const parentForBranch139 = initialCommits[masterCommitsIds[7]]; // 8th commit on master (index 7)
+    let parentCommitIdBranch139 = parentForBranch139.id;
+    let currentDepthBranch139 = parentForBranch139.depth + 1;
+    const branch139Lane = currentLane;
 
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < 5; i++) {
       const newCommit = createCommit(
-        [parentCommitIdBranch134], // First commit on branch has master commit as parent
+        [parentCommitIdBranch139],
         `Commit`,
-        branch134Lane,
-        currentDepthBranch134,
-        branch134Name
+        branch139Lane,
+        currentDepthBranch139,
+        branch139Name
       );
-       // For subsequent commits on this branch, the parent is the previous commit on this branch
-      if (i > 0 || initialCommits[newCommit.id]?.parentIds[0] !== parentForBranch134.id) {
-         newCommit.parentIds = [parentCommitIdBranch134];
+       if (i > 0 || initialCommits[newCommit.id]?.parentIds[0] !== parentForBranch139.id) {
+         newCommit.parentIds = [parentCommitIdBranch139];
       }
       initialCommits[newCommit.id] = newCommit;
-      parentCommitIdBranch134 = newCommit.id;
-      currentDepthBranch134++;
+      parentCommitIdBranch139 = newCommit.id;
+      currentDepthBranch139++;
     }
-    initialBranches[branch134Name] = {
-      name: branch134Name,
-      headCommitId: parentCommitIdBranch134,
-      lane: branch134Lane,
+    initialBranches[branch139Name] = {
+      name: branch139Name,
+      headCommitId: parentCommitIdBranch139,
+      lane: branch139Lane,
     };
     currentLane++;
 
@@ -198,34 +197,35 @@ export default function GitExplorerView() {
     };
     currentLane++;
 
-    // --- BRANCH 139 ---
-    const branch139Name = '139';
-    const parentForBranch139 = initialCommits[masterCommitsIds[7]]; // 8th commit on master (index 7)
-    let parentCommitIdBranch139 = parentForBranch139.id;
-    let currentDepthBranch139 = parentForBranch139.depth + 1;
-    const branch139Lane = currentLane;
+    // --- BRANCH 134 ---
+    const branch134Name = '134';
+    const parentForBranch134 = initialCommits[masterCommitsIds[2]]; // 3rd commit on master (index 2)
+    let parentCommitIdBranch134 = parentForBranch134.id;
+    let currentDepthBranch134 = parentForBranch134.depth + 1;
+    const branch134Lane = currentLane;
 
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < 3; i++) {
       const newCommit = createCommit(
-        [parentCommitIdBranch139],
+        [parentCommitIdBranch134], // First commit on branch has master commit as parent
         `Commit`,
-        branch139Lane,
-        currentDepthBranch139,
-        branch139Name
+        branch134Lane,
+        currentDepthBranch134,
+        branch134Name
       );
-       if (i > 0 || initialCommits[newCommit.id]?.parentIds[0] !== parentForBranch139.id) {
-         newCommit.parentIds = [parentCommitIdBranch139];
+        // For subsequent commits on this branch, the parent is the previous commit on this branch
+      if (i > 0 || initialCommits[newCommit.id]?.parentIds[0] !== parentForBranch134.id) {
+          newCommit.parentIds = [parentCommitIdBranch134];
       }
       initialCommits[newCommit.id] = newCommit;
-      parentCommitIdBranch139 = newCommit.id;
-      currentDepthBranch139++;
+      parentCommitIdBranch134 = newCommit.id;
+      currentDepthBranch134++;
     }
-    initialBranches[branch139Name] = {
-      name: branch139Name,
-      headCommitId: parentCommitIdBranch139,
-      lane: branch139Lane,
+    initialBranches[branch134Name] = {
+      name: branch134Name,
+      headCommitId: parentCommitIdBranch134,
+      lane: branch134Lane,
     };
-    currentLane++;
+    currentLane++;    
 
     setCommits(initialCommits);
     setBranches(initialBranches);
