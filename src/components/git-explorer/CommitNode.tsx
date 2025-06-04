@@ -82,7 +82,6 @@ export function CommitNode({ commit, isSelected, isBranchHead, isCurrentBranchHe
       onClick={() => onSelect(commit.id)}
       className="cursor-pointer group"
       aria-label={`Commit ID ${commit.id}`}
-      draggable={true}
       onDragStart={handleDragStart}
       onDragOver={handleDragOver}
       onDragEnter={handleDragEnter}
