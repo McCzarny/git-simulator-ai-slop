@@ -1,4 +1,3 @@
-
 "use client";
 
 import { Button } from '@/components/ui/button';
@@ -26,6 +25,7 @@ interface ControlsProps {
   onAddCustomCommits: () => void;
   isMoveModeActive: boolean;
   toggleMoveMode: () => void;
+  onReset: () => void;
 }
 
 export function Controls({
@@ -39,7 +39,8 @@ export function Controls({
   onMergeBranch,
   onAddCustomCommits,
   isMoveModeActive,
-  toggleMoveMode
+  toggleMoveMode,
+  onReset
 }: ControlsProps) {
 
   const [sourceBranchForMerge, setSourceBranchForMerge] = useState<string | null>(null);
@@ -106,6 +107,13 @@ export function Controls({
             variant="outline"
           >
             <Layers className="mr-2 h-4 w-4" /> Apply Customisations
+          </Button>
+          <Button
+            onClick={onReset}
+            variant="secondary"
+            aria-label="Resetuj symulację"
+          >
+            Reset
           </Button>
         </div>
 
