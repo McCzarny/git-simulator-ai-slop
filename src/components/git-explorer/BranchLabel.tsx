@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { BranchType, PositionedCommit } from '@/types/git';
@@ -15,7 +16,7 @@ export function BranchLabel({ branch, headCommitPosition, isSelected, onSelect }
 
   return (
     <g
-      transform={`translate(${headCommitPosition.x}, ${headCommitPosition.y - 35})`}
+      transform={`translate(${headCommitPosition.x}, ${headCommitPosition.y - 28})`} // Adjusted vertical offset
       onClick={() => onSelect(branch.name)}
       className="cursor-pointer group"
       aria-label={`Branch ${branch.name}`}
