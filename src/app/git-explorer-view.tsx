@@ -222,6 +222,7 @@ export default function GitExplorerView() {
 
   const [nextCommitIdx, setNextCommitIdx] = useState(0);
   const [nextBranchNumber, setNextBranchNumber] = useState(132); // Start from a base
+  const [nextCustomSuffix, setNextCustomSuffix] = useState(1);
   const [nextSharedTimestamp, setNextSharedTimestamp] = useState(Date.now());
 
 
@@ -261,7 +262,6 @@ export default function GitExplorerView() {
 
     const appendCommitsToBranch = (
       startingParentCommit: CommitType,
-      // branchNameForMessage: string, // No longer needed
       numberOfCommits: number,
       initialLaneGuess: number,
       targetCommitsMap: Record<string, CommitType>,
@@ -333,6 +333,7 @@ export default function GitExplorerView() {
       .filter(num => !isNaN(num));
     const maxBranchNum = numericBranchNames.length > 0 ? Math.max(...numericBranchNames) : (132 -1) ;
     setNextBranchNumber(Math.max(132, maxBranchNum + 1));
+    // nextCustomSuffix starts at 1, no need to parse from initial branches unless they were also "custom-X"
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -376,9 +377,9 @@ export default function GitExplorerView() {
       id: newCommitId,
       parentIds: [parentCommit.id],
       timestamp: getNewTimestamp(),
-      branchLane: currentBranch.lane, // This will be updated by recalculate, but good initial guess
+      branchLane: currentBranch.lane, 
       depth: parentCommit.depth + 1,
-      // isCustom defaults to false
+      isCustom: false,
     };
 
     const newCommitsMap = { ...commits, [newCommitId]: newCommit };
@@ -412,14 +413,14 @@ export default function GitExplorerView() {
           id: newCommitId,
           parentIds: [selectedCommitId],
           timestamp: newBranchTimestamp,
-          branchLane: 0, // Lane will be recalculated
+          branchLane: 0, 
           depth: parentCommitForBranch.depth + 1,
-          // isCustom defaults to false
+          isCustom: false,
       };
       const newBranchDef: BranchType = {
           name: newBranchName,
           headCommitId: newCommitId,
-          lane: 0 // Lane will be recalculated
+          lane: 0 
       };
 
       draftCommits[newCommitId] = newBranchInitialCommit;
@@ -441,7 +442,7 @@ export default function GitExplorerView() {
     }
     const parentCommitForBranch = commits[selectedCommitId];
     let localNextCommitIdx = nextCommitIdx;
-    const localNextBranchNumber = nextBranchNumber;
+    const localNextCustomSuffix = nextCustomSuffix;
 
     const customTimestamps: number[] = [];
     for (let i=0; i<4; i++) {
@@ -449,7 +450,7 @@ export default function GitExplorerView() {
     }
 
     const result = performGitActionAndUpdateLayout((draftCommits, draftBranches) => {
-      const newBranchName = `${localNextBranchNumber}-custom`;
+      const newBranchName = `custom-${localNextCustomSuffix}`;
 
       let tempParentId = selectedCommitId;
       let tempParentDepth = parentCommitForBranch.depth;
@@ -461,7 +462,7 @@ export default function GitExplorerView() {
           id: newCommitId,
           parentIds: [tempParentId],
           timestamp: customTimestamps[i],
-          branchLane: 0, // Lane will be recalculated
+          branchLane: 0, 
           depth: tempParentDepth + 1,
           isCustom: true,
         };
@@ -473,7 +474,7 @@ export default function GitExplorerView() {
       const newBranchDef: BranchType = {
         name: newBranchName,
         headCommitId: headOfCustomCommits,
-        lane: 0 // Lane will be recalculated
+        lane: 0 
       };
       draftBranches[newBranchName] = newBranchDef;
       return { newBranchName, headOfCustomCommits, updatedNextCommitIdx: localNextCommitIdx + 4 };
@@ -482,9 +483,9 @@ export default function GitExplorerView() {
     setSelectedBranchName(result.newBranchName);
     setSelectedCommitId(result.headOfCustomCommits);
     setNextCommitIdx(result.updatedNextCommitIdx);
-    setNextBranchNumber(prev => prev + 1); // Increment for the next custom branch
+    setNextCustomSuffix(prev => prev + 1); 
     toast({ title: "Customisations Applied", description: `Branch ${result.newBranchName} created with 4 custom commits. Layout updated.` });
-  }, [selectedCommitId, commits, branches, nextCommitIdx, nextBranchNumber, toast, performGitActionAndUpdateLayout, getNewTimestamp]);
+  }, [selectedCommitId, commits, branches, nextCommitIdx, nextCustomSuffix, toast, performGitActionAndUpdateLayout, getNewTimestamp]);
 
 
   const handleSelectCommit = useCallback((commitId: string) => {
@@ -530,7 +531,6 @@ export default function GitExplorerView() {
         const current_descendant = q_descendants[head_desc++];
         if (current_descendant === newParentId) { isCyclic = true; break; }
 
-        // Check against current commits state, not draft
         Object.values(commits).forEach(commit => {
             if (commit.parentIds.includes(current_descendant) && !visited_descendants.has(commit.id)) {
                 visited_descendants.add(commit.id);
@@ -616,7 +616,6 @@ export default function GitExplorerView() {
       toast({ title: "Error", description: "Head commit not found for one or both branches.", variant: "destructive" }); return;
     }
 
-    // Check if source is already an ancestor of target (simple check)
     let current = targetHeadCommit;
     const visitedAncestors = new Set<string>();
     const q_anc: string[] = [];
@@ -646,9 +645,9 @@ export default function GitExplorerView() {
         id: newCommitId,
         parentIds: [targetHeadCommit.id, sourceHeadCommit.id],
         timestamp: mergeTimestamp,
-        branchLane: draftBranches[targetBranch.name].lane, // Will be recalculated, but good initial guess
+        branchLane: draftBranches[targetBranch.name].lane, 
         depth: Math.max(targetHeadCommit.depth, sourceHeadCommit.depth) + 1,
-        // isCustom defaults to false
+        isCustom: false,
       };
 
       draftCommits[newCommitId] = newMergeCommit;
@@ -705,3 +704,6 @@ export default function GitExplorerView() {
     </div>
   );
 }
+
+
+    
