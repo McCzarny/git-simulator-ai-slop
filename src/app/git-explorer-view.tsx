@@ -8,8 +8,8 @@ import { Controls } from '@/components/git-explorer/Controls';
 import { useToast } from "@/hooks/use-toast";
 
 const INITIAL_BRANCH_NAME = 'master';
-const X_SPACING = 120;
-const Y_SPACING = 80;
+const X_SPACING = 90; // Reduced from 120
+const Y_SPACING = 60; // Reduced from 80
 const GRAPH_PADDING = 50;
 
 // Helper to determine the conceptual fork parent for a branch for sorting lanes
@@ -329,7 +329,10 @@ export default function GitExplorerView() {
     setNextCommitIdx(commitCounter);
 
     const numericBranchNames = Object.keys(updatedBranches)
-      .map(name => parseInt(name.split('-')[0], 10))
+      .map(name => {
+        const parts = name.split('-');
+        return parseInt(parts[0], 10);
+      })
       .filter(num => !isNaN(num));
     const maxBranchNum = numericBranchNames.length > 0 ? Math.max(...numericBranchNames) : (132 -1) ;
     setNextBranchNumber(Math.max(132, maxBranchNum + 1));
