@@ -96,14 +96,14 @@ export function CommitNode({ commit, isSelected, isBranchHead, isCurrentBranchHe
         className={`${fillColor} ${strokeColorClass} transition-all duration-150 group-hover:opacity-80`}
         strokeWidth={currentStrokeWidth}
       />
-      <GitCommit
-        className="text-primary-foreground" // Tailwind class for color
-        width="16" // Direct SVG attribute for width
-        height="16" // Direct SVG attribute for height
-        style={{ transform: 'translate(-8px, -8px)'}} // CSS transform for positioning
-      />
+      <g transform="translate(-8 -8)">
+        <GitCommit
+          className="text-primary-foreground" 
+          width={16} 
+          height={16} 
+        />
+      </g>
       <title>{`Commit: ${commit.id}`}</title>
     </g>
   );
 }
-
