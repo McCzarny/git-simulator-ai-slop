@@ -362,7 +362,7 @@ export default function GitExplorerView() {
       return;
     }
     const parentCommitForBranch = commits[selectedCommitId];
-    const newBranchName = `Custom-branch`;
+    const newBranchName = `Custom`;
     // Lane will be determined by recalculateAndAssignLanes
 
     let tempCommitsMap = { ...commits };
