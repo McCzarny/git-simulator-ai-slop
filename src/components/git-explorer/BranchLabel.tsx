@@ -14,9 +14,15 @@ export function BranchLabel({ branch, headCommitPosition, isSelected, onSelect }
   const labelColor = isSelected ? 'fill-accent' : 'fill-primary';
   const fontWeight = isSelected ? 'font-bold' : 'font-medium';
 
+  // Adjusted Y-offset to move the label below the commit dot.
+  // Commit radius is 12. Rect height is 24, rect y is -15.
+  // New Y_OFFSET_GROUP = 30.
+  // Rect top in screen coords: headCommitPosition.y + 30 - 15 = headCommitPosition.y + 15.
+  // Commit bottom in screen coords: headCommitPosition.y + 12.
+  // Gap is 3px.
   return (
     <g
-      transform={`translate(${headCommitPosition.x}, ${headCommitPosition.y - 28})`} // Adjusted vertical offset
+      transform={`translate(${headCommitPosition.x}, ${headCommitPosition.y + 30})`}
       onClick={() => onSelect(branch.name)}
       className="cursor-pointer group"
       aria-label={`Branch ${branch.name}`}
