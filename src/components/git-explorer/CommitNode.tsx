@@ -97,10 +97,13 @@ export function CommitNode({ commit, isSelected, isBranchHead, isCurrentBranchHe
         strokeWidth={currentStrokeWidth}
       />
       <GitCommit
-        className={`w-4 h-4 text-primary-foreground`}
-        style={{ transform: 'translate(-8px, -8px)'}}
+        className="text-primary-foreground" // Tailwind class for color
+        width="16" // Direct SVG attribute for width
+        height="16" // Direct SVG attribute for height
+        style={{ transform: 'translate(-8px, -8px)'}} // CSS transform for positioning
       />
       <title>{`Commit: ${commit.id}`}</title>
     </g>
   );
 }
+
