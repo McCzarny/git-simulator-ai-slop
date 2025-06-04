@@ -3,8 +3,8 @@ import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
 
 export const metadata: Metadata = {
-  title: 'Git Explorer',
-  description: 'Interactive Git Repository Explorer',
+  title: 'Git Simulator',
+  description: 'Interactive Git Repository Simulator',
 };
 
 export default function RootLayout({

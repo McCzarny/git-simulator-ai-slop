@@ -330,11 +330,11 @@ export default function GitExplorerView() {
 
     const numericBranchNames = Object.keys(updatedBranches)
       .map(name => {
-        const parts = name.split('-');
+        const parts = name.split('-'); // Handles "custom-X" vs "X"
         return parseInt(parts[0], 10);
       })
       .filter(num => !isNaN(num));
-    const maxBranchNum = numericBranchNames.length > 0 ? Math.max(...numericBranchNames) : (132 -1) ;
+    const maxBranchNum = numericBranchNames.length > 0 ? Math.max(...numericBranchNames) : (132 -1) ; // Ensure at least 132
     setNextBranchNumber(Math.max(132, maxBranchNum + 1));
     // nextCustomSuffix starts at 1, no need to parse from initial branches unless they were also "custom-X"
 
@@ -671,7 +671,7 @@ export default function GitExplorerView() {
   return (
     <div className="flex flex-col h-screen p-4 gap-4 bg-background text-foreground">
       <header className="text-center py-2">
-        <h1 className="text-3xl font-headline font-bold text-primary">Git Explorer</h1>
+        <h1 className="text-3xl font-headline font-bold text-primary">Git Simulator</h1>
       </header>
       <Controls
         selectedBranchName={selectedBranchName}
