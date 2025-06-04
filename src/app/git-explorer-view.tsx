@@ -146,15 +146,15 @@ export default function GitExplorerView() {
     const masterBranchName = INITIAL_BRANCH_NAME;
     let parentCommitIdMaster: string | null = null;
     let currentDepthMaster = 0;
-    const masterCommitsIds: string[] = []; // To easily access specific master commits later
+    const masterCommitsIds: string[] = []; 
 
     for (let i = 0; i < 10; i++) {
       const newCommit = createCommit(
         parentCommitIdMaster ? [parentCommitIdMaster] : [],
         `Commit`,
-        currentLane, // Master branch lane
+        currentLane, 
         currentDepthMaster,
-        masterBranchName // Pass branch name for message formatting
+        masterBranchName 
       );
       initialCommits[newCommit.id] = newCommit;
       masterCommitsIds.push(newCommit.id);
@@ -170,7 +170,7 @@ export default function GitExplorerView() {
 
     // --- BRANCH 134 ---
     const branch134Name = '134';
-    const parentForBranch134 = initialCommits[masterCommitsIds[2]]; // 3rd commit on master (0-indexed)
+    const parentForBranch134 = initialCommits[masterCommitsIds[2]]; 
     const branch134Lane = currentLane;
     const branch134HeadId = appendCommitsToBranch(parentForBranch134, branch134Name, 3, branch134Lane, initialCommits);
     initialBranches[branch134Name] = {
@@ -182,7 +182,7 @@ export default function GitExplorerView() {
 
     // --- BRANCH 136 ---
     const branch136Name = '136';
-    const parentForBranch136 = initialCommits[masterCommitsIds[4]]; // 5th commit on master
+    const parentForBranch136 = initialCommits[masterCommitsIds[4]]; 
     const branch136Lane = currentLane;
     const branch136HeadId = appendCommitsToBranch(parentForBranch136, branch136Name, 4, branch136Lane, initialCommits);
     initialBranches[branch136Name] = {
@@ -194,7 +194,7 @@ export default function GitExplorerView() {
     
     // --- BRANCH 139 ---
     const branch139Name = '139';
-    const parentForBranch139 = initialCommits[masterCommitsIds[7]]; // 8th commit on master
+    const parentForBranch139 = initialCommits[masterCommitsIds[7]]; 
     const branch139Lane = currentLane;
     const branch139HeadId = appendCommitsToBranch(parentForBranch139, branch139Name, 5, branch139Lane, initialCommits);
     initialBranches[branch139Name] = {
@@ -416,6 +416,79 @@ export default function GitExplorerView() {
 
   }, [commits, toast]);
 
+  const handleMergeBranch = useCallback((sourceBranchNameToMerge: string) => {
+    if (!selectedBranchName || !branches[selectedBranchName]) {
+      toast({ title: "Error", description: "No target branch selected for merge.", variant: "destructive" });
+      return;
+    }
+    if (!branches[sourceBranchNameToMerge]) {
+      toast({ title: "Error", description: "Source branch for merge not found.", variant: "destructive" });
+      return;
+    }
+    if (selectedBranchName === sourceBranchNameToMerge) {
+      toast({ title: "Error", description: "Cannot merge a branch into itself.", variant: "destructive" });
+      return;
+    }
+
+    const targetBranch = branches[selectedBranchName];
+    const sourceBranch = branches[sourceBranchNameToMerge];
+
+    const targetHeadCommit = commits[targetBranch.headCommitId];
+    const sourceHeadCommit = commits[sourceBranch.headCommitId];
+
+    if (!targetHeadCommit || !sourceHeadCommit) {
+      toast({ title: "Error", description: "Head commit not found for one or both branches.", variant: "destructive" });
+      return;
+    }
+    
+    // Basic check: don't merge if source head is already an ancestor of target head
+    let current = targetHeadCommit;
+    const visitedAncestors = new Set<string>();
+    const queue = [current.id];
+    visitedAncestors.add(current.id);
+    let head = 0;
+    while(head < queue.length){
+        const currentId = queue[head++];
+        const commitNode = commits[currentId];
+        if(commitNode.id === sourceHeadCommit.id){
+            toast({ title: "Already Merged", description: `Branch ${sourceBranchNameToMerge} is already an ancestor of ${selectedBranchName}.`, variant: "destructive"});
+            return;
+        }
+        commitNode.parentIds.forEach(pid => {
+            if(!visitedAncestors.has(pid)){
+                visitedAncestors.add(pid);
+                queue.push(pid);
+            }
+        })
+    }
+
+
+    const newCommitId = `commit-${nextCommitIdx}`;
+    const commitNumberStr = newCommitId.split('-')[1];
+    const message = `Merge branch '${sourceBranchNameToMerge}' into '${selectedBranchName}' (commit ${commitNumberStr})`;
+
+    const newMergeCommit: CommitType = {
+      id: newCommitId,
+      parentIds: [targetHeadCommit.id, sourceHeadCommit.id], // Order: target first, source second
+      message: message,
+      timestamp: Date.now(),
+      branchLane: targetBranch.lane, // Merge commit stays on the target branch's lane
+      depth: targetHeadCommit.depth + 1, // Place it after the target's head
+    };
+
+    setCommits(prev => ({ ...prev, [newCommitId]: newMergeCommit }));
+    setBranches(prev => ({
+      ...prev,
+      [targetBranch.name]: { ...targetBranch, headCommitId: newCommitId },
+    }));
+    
+    setSelectedCommitId(newCommitId); // Select the new merge commit
+    // setSelectedBranchName remains the target branch
+    setNextCommitIdx(prev => prev + 1);
+    toast({ title: "Merge Successful", description: `Branch '${sourceBranchNameToMerge}' merged into '${selectedBranchName}'. New commit: ${newMergeCommit.message.substring(0,25)}...` });
+
+  }, [selectedBranchName, branches, commits, nextCommitIdx, toast]);
+
 
   const { positionedCommits, edges, graphWidth, graphHeight } = useMemo(() => {
     return calculateLayout(commits, branches);
@@ -430,9 +503,11 @@ export default function GitExplorerView() {
         selectedBranchName={selectedBranchName}
         selectedCommitId={selectedCommitId}
         commits={commits} 
+        branches={branches} // Pass branches down
         onAddCommit={handleAddCommit}
         onCreateBranch={handleCreateBranch}
         onMoveCommit={handleMoveCommit}
+        onMergeBranch={handleMergeBranch} // Pass merge handler
         isMoveModeActive={isMoveModeActive}
         toggleMoveMode={toggleMoveMode}
       />
@@ -457,3 +532,4 @@ export default function GitExplorerView() {
     </div>
   );
 }
+

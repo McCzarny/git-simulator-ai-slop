@@ -2,7 +2,7 @@
 "use client";
 
 import { Button } from '@/components/ui/button';
-import { GitCommit, GitBranchPlus, MoveIcon, AlertTriangle } from 'lucide-react';
+import { GitCommit, GitBranchPlus, MoveIcon, AlertTriangle, GitMergeIcon } from 'lucide-react';
 import {
   Select,
   SelectContent,
@@ -10,15 +10,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import type { CommitType } from '@/types/git';
+import type { CommitType, BranchType } from '@/types/git';
+import React, { useState } from 'react'; // Added React and useState
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 interface ControlsProps {
   selectedBranchName: string | null;
   selectedCommitId: string | null;
   commits: Record<string, CommitType>;
+  branches: Record<string, BranchType>; // Added branches
   onAddCommit: () => void;
   onCreateBranch: () => void;
-  onMoveCommit: (commitToMoveId: string, targetParentId: string) => void; // Updated signature
+  onMoveCommit: (commitToMoveId: string, targetParentId: string) => void;
+  onMergeBranch: (sourceBranchName: string) => void; // Added onMergeBranch
   isMoveModeActive: boolean;
   toggleMoveMode: () => void;
 }
@@ -27,26 +31,39 @@ export function Controls({
   selectedBranchName,
   selectedCommitId,
   commits,
+  branches, // Destructure branches
   onAddCommit,
   onCreateBranch,
   onMoveCommit,
+  onMergeBranch, // Destructure onMergeBranch
   isMoveModeActive,
   toggleMoveMode
 }: ControlsProps) {
   
+  const [sourceBranchForMerge, setSourceBranchForMerge] = useState<string | null>(null);
+
   const handleMoveTargetSelect = (targetParentId: string) => {
     if (!selectedCommitId) {
-      // This should ideally not happen if move mode is active correctly
       return;
     }
     if(targetParentId === selectedCommitId){
-      // Toast is handled by parent
       return;
     }
-    onMoveCommit(selectedCommitId, targetParentId); // Use selectedCommitId as the source
+    onMoveCommit(selectedCommitId, targetParentId);
   };
   
   const availableCommitsForMove = Object.values(commits).filter(c => c.id !== selectedCommitId);
+  const availableBranchesForMerge = selectedBranchName 
+    ? Object.keys(branches).filter(bName => bName !== selectedBranchName && branches[bName].headCommitId !== commits[selectedCommitId!]?.parentIds.includes(branches[bName].headCommitId))
+    : [];
+
+
+  const handleMergeClick = () => {
+    if (sourceBranchForMerge) {
+      onMergeBranch(sourceBranchForMerge);
+      setSourceBranchForMerge(null); // Reset after attempting merge
+    }
+  };
 
   return (
     <Card className="p-4 shadow-md">
@@ -74,7 +91,7 @@ export function Controls({
           </Button>
           <Button
             onClick={toggleMoveMode}
-            disabled={!selectedCommitId} // Disable if no commit is selected to initiate move
+            disabled={!selectedCommitId}
             variant={isMoveModeActive ? "destructive" : "outline"}
             aria-label={isMoveModeActive ? "Cancel Move Commit (or use drag-and-drop)" : "Initiate Move Commit (or use drag-and-drop)"}
           >
@@ -108,8 +125,44 @@ export function Controls({
             </p>
           </div>
         )}
+
+        {!isMoveModeActive && selectedBranchName && (
+          <div className="p-4 border rounded-md bg-secondary/50 mt-4">
+            <p className="text-sm font-medium text-secondary-foreground mb-2">
+              Merge into <span className="font-bold">{selectedBranchName}</span>:
+            </p>
+            <div className="flex gap-2">
+              <Select 
+                onValueChange={setSourceBranchForMerge} 
+                value={sourceBranchForMerge || ""}
+                disabled={availableBranchesForMerge.length === 0}
+              >
+                <SelectTrigger className="flex-grow">
+                  <SelectValue placeholder="Select source branch to merge..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableBranchesForMerge.map(branchName => (
+                    <SelectItem key={branchName} value={branchName}>
+                      {branchName} (Head: {commits[branches[branchName].headCommitId]?.message.substring(0,8)})
+                    </SelectItem>
+                  ))}
+                  {availableBranchesForMerge.length === 0 && (
+                    <div className="p-2 text-sm text-muted-foreground">No other branches available to merge.</div>
+                  )}
+                </SelectContent>
+              </Select>
+              <Button
+                onClick={handleMergeClick}
+                disabled={!sourceBranchForMerge || !selectedBranchName}
+                aria-label={`Merge branch ${sourceBranchForMerge || ''} into ${selectedBranchName}`}
+              >
+                <GitMergeIcon className="mr-2 h-4 w-4" /> Merge
+              </Button>
+            </div>
+          </div>
+        )}
         
-        <div className="text-sm text-muted-foreground">
+        <div className="text-sm text-muted-foreground pt-2">
           {selectedBranchName && <p>Selected Branch: <span className="font-semibold text-primary">{selectedBranchName}</span></p>}
           {selectedCommitId && <p>Selected Commit: <span className="font-semibold text-accent">{commits[selectedCommitId]?.message.substring(0,8)}</span></p>}
         </div>
@@ -117,5 +170,3 @@ export function Controls({
     </Card>
   );
 }
-
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
