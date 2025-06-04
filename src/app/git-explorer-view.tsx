@@ -303,56 +303,60 @@ export default function GitExplorerView() {
   }, [selectedCommitId, commits, nextCommitIdx, nextBranchNumber, nextLaneIdx, toast]);
 
   const handleAddCustomCommits = useCallback(() => {
-    if (!selectedBranchName || !branches[selectedBranchName]) {
-      toast({ title: "Error", description: "No branch selected to add commits.", variant: "destructive" });
+    if (!selectedCommitId || !commits[selectedCommitId]) {
+      toast({ title: "Error", description: "No commit selected to branch from for customisations.", variant: "destructive" });
       return;
     }
 
-    const currentBranch = branches[selectedBranchName];
-    let parentCommit = commits[currentBranch.headCommitId];
+    const parentCommitForBranch = commits[selectedCommitId];
+    const newBranchName = `${nextBranchNumber}`;
+    const newBranchLane = nextLaneIdx;
 
-    if (!parentCommit) {
-      toast({ title: "Error", description: "Head commit of selected branch not found.", variant: "destructive" });
-      return;
-    }
-
-    const newCommitsBatch: Record<string, CommitType> = {};
-    let currentParentId = parentCommit.id;
-    let currentDepth = parentCommit.depth;
-    let newHeadCommitId = parentCommit.id;
+    const newCommitsData: Record<string, CommitType> = {};
+    let tempParentId = selectedCommitId;
+    let tempParentDepth = parentCommitForBranch.depth;
+    let headOfCustomCommits = '';
     let localNextCommitIdx = nextCommitIdx;
 
     for (let i = 0; i < 4; i++) {
       const newCommitId = `commit-${localNextCommitIdx}`;
       const commitNumberStr = newCommitId.split('-')[1];
-      const message = `Custom Commit ${commitNumberStr}${currentBranch.name !== INITIAL_BRANCH_NAME ? ` (on ${currentBranch.name})` : ''}`;
+      const message = `Custom Commit ${commitNumberStr} (on ${newBranchName})`;
       
-      const newCommit: CommitType = {
+      const newCustomCommit: CommitType = {
         id: newCommitId,
-        parentIds: [currentParentId],
+        parentIds: [tempParentId],
         message: message,
-        timestamp: Date.now() + i, // Stagger timestamps slightly for sorting
-        branchLane: currentBranch.lane,
-        depth: currentDepth + 1,
+        timestamp: Date.now() + i, // Stagger timestamps for sorting
+        branchLane: newBranchLane,
+        depth: tempParentDepth + 1,
       };
 
-      newCommitsBatch[newCommitId] = newCommit;
-      currentParentId = newCommitId;
-      currentDepth = newCommit.depth;
-      newHeadCommitId = newCommitId;
+      newCommitsData[newCommitId] = newCustomCommit;
+      tempParentId = newCommitId;
+      tempParentDepth = newCustomCommit.depth;
+      headOfCustomCommits = newCommitId;
       localNextCommitIdx++;
     }
+    
+    const newBranchDef: BranchType = {
+      name: newBranchName,
+      headCommitId: headOfCustomCommits,
+      lane: newBranchLane,
+    };
 
-    setCommits(prev => ({ ...prev, ...newCommitsBatch }));
-    setBranches(prev => ({
-      ...prev,
-      [currentBranch.name]: { ...currentBranch, headCommitId: newHeadCommitId },
-    }));
-    setSelectedCommitId(newHeadCommitId);
-    setNextCommitIdx(localNextCommitIdx); // Update the main counter
-    toast({ title: "Custom Commits Added", description: `4 custom commits added to branch ${currentBranch.name}.` });
+    setCommits(prev => ({ ...prev, ...newCommitsData }));
+    setBranches(prev => ({ ...prev, [newBranchName]: newBranchDef }));
+    
+    setSelectedBranchName(newBranchName);
+    setSelectedCommitId(headOfCustomCommits);
+    setNextCommitIdx(localNextCommitIdx);
+    setNextBranchNumber(prev => prev + 1);
+    setNextLaneIdx(prev => prev + 1);
 
-  }, [selectedBranchName, branches, commits, nextCommitIdx, toast]);
+    toast({ title: "Customisations Applied", description: `Branch ${newBranchName} created with 4 custom commits from ${parentCommitForBranch.message.substring(0,8)}.` });
+
+  }, [selectedCommitId, commits, nextCommitIdx, nextBranchNumber, nextLaneIdx, toast]);
 
 
   const handleSelectCommit = useCallback((commitId: string) => {
@@ -444,31 +448,25 @@ export default function GitExplorerView() {
         const currentProcessedParentId = queue[head++];
         const currentProcessedParentData = newCommitsState[currentProcessedParentId];
 
-        for (const potentialChildId in newCommitsState) {
-            const potentialChildCommit = newCommitsState[potentialChildId];
-            // Check if potentialChildCommit is a direct child of currentProcessedParentData
-            // AND it's not the commit we just moved (unless it's being re-evaluated as a child of itself later in a different context which shouldn't happen here)
-            // AND it hasn't been visited in *this specific BFS recalculation run*
+        // Find all direct children of currentProcessedParentData in the *original* graph structure
+        // that are not the commit being moved itself (unless it's a multi-parent scenario which we are not deeply handling for reparenting this way)
+        Object.values(currentCommits).forEach(potentialChildCommit => {
             if (potentialChildCommit.parentIds.includes(currentProcessedParentId) && 
-                potentialChildId !== commitToMoveId && // This condition might be too restrictive if the moved commit had multiple parents and one was currentProcessedParentId
-                                                     // Let's assume for now a commit only has one parent that matters for this BFS path, or it's complex merge scenario handling
-                !visitedInThisBFSRecalculation.has(potentialChildId)) { 
+                potentialChildCommit.id !== commitToMoveId && // Don't re-process the moved commit as its own child in this loop
+                !visitedInThisBFSRecalculation.has(potentialChildCommit.id)) {
                 
-                 newCommitsState[potentialChildId] = {
-                    ...potentialChildCommit,
+                 newCommitsState[potentialChildCommit.id] = {
+                    ...potentialChildCommit, // Start with the original child data
+                    // Parent might change if currentProcessedParentId IS the moved commit, 
+                    // but for children of moved commit, their parent (which is currentProcessedParentId) depth/lane has changed.
                     depth: currentProcessedParentData.depth + 1,
                     branchLane: currentProcessedParentData.branchLane, // Children adopt parent's lane
                     timestamp: movedCommitTime + descendantTimestampCounter++, // Stagger timestamps
                 };
-                visitedInThisBFSRecalculation.add(potentialChildId);
-                queue.push(potentialChildId); 
-            } else if (potentialChildCommit.parentIds.includes(currentProcessedParentId) && potentialChildId !== commitToMoveId && visitedInThisBFSRecalculation.has(potentialChildId)) {
-                // This case means we've found a child we already processed in this BFS run.
-                // This could indicate a complex graph structure or a path we shouldn't re-traverse in this specific update pass.
-                // For simple re-parenting, this might not be hit often, but good to be aware of.
-                // If we re-evaluate, ensure depth is max of paths. For now, we assume first path sets it.
+                visitedInThisBFSRecalculation.add(potentialChildCommit.id);
+                queue.push(potentialChildCommit.id); 
             }
-        }
+        });
     }
     setCommits(newCommitsState);
     setIsMoveModeActive(false);
@@ -568,7 +566,7 @@ export default function GitExplorerView() {
         onCreateBranch={handleCreateBranch}
         onMoveCommit={handleMoveCommit}
         onMergeBranch={handleMergeBranch}
-        onAddCustomCommits={handleAddCustomCommits} // Pass new handler
+        onAddCustomCommits={handleAddCustomCommits} 
         isMoveModeActive={isMoveModeActive}
         toggleMoveMode={toggleMoveMode}
       />

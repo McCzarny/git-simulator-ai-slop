@@ -23,7 +23,7 @@ interface ControlsProps {
   onCreateBranch: () => void;
   onMoveCommit: (commitToMoveId: string, targetParentId: string) => void;
   onMergeBranch: (sourceBranchName: string) => void;
-  onAddCustomCommits: () => void; // New prop
+  onAddCustomCommits: () => void;
   isMoveModeActive: boolean;
   toggleMoveMode: () => void;
 }
@@ -37,7 +37,7 @@ export function Controls({
   onCreateBranch,
   onMoveCommit,
   onMergeBranch,
-  onAddCustomCommits, // Destructure new prop
+  onAddCustomCommits,
   isMoveModeActive,
   toggleMoveMode
 }: ControlsProps) {
@@ -55,8 +55,8 @@ export function Controls({
   };
   
   const availableCommitsForMove = Object.values(commits).filter(c => c.id !== selectedCommitId);
-  const availableBranchesForMerge = selectedBranchName 
-    ? Object.keys(branches).filter(bName => bName !== selectedBranchName && branches[bName].headCommitId !== commits[selectedCommitId!]?.parentIds.includes(branches[bName].headCommitId))
+  const availableBranchesForMerge = selectedBranchName && selectedCommitId && commits[selectedCommitId]
+    ? Object.keys(branches).filter(bName => bName !== selectedBranchName && !commits[selectedCommitId!]?.parentIds.includes(branches[bName].headCommitId))
     : [];
 
 
@@ -101,8 +101,8 @@ export function Controls({
           </Button>
           <Button
             onClick={onAddCustomCommits}
-            disabled={!selectedBranchName || isMoveModeActive}
-            aria-label="Add 4 custom commits to selected branch"
+            disabled={!selectedCommitId || isMoveModeActive}
+            aria-label="Create new branch with 4 custom commits from selected commit"
             variant="outline"
           >
             <Layers className="mr-2 h-4 w-4" /> Apply Customisations
@@ -180,3 +180,4 @@ export function Controls({
     </Card>
   );
 }
+
