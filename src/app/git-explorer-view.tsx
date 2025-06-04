@@ -765,25 +765,12 @@ export default function GitExplorerView() {
   }, [commits, branches]);
 
   return (
-    <div className="flex flex-col h-screen p-4 gap-4 bg-background text-foreground">
+    <div className="flex flex-col h-screen p-4 bg-background text-foreground relative">
       <header className="text-center py-2">
         <h1 className="text-3xl font-headline font-bold text-primary">Git Simulator</h1>
       </header>
-      <Controls
-        selectedBranchName={selectedBranchName}
-        selectedCommitId={selectedCommitId}
-        commits={commits}
-        branches={branches}
-        onAddCommit={handleAddCommit}
-        onCreateBranch={handleCreateBranch}
-        onMoveCommit={handleMoveCommit}
-        onMergeBranch={handleMergeBranch}
-        onAddCustomCommits={handleAddCustomCommits}
-        isMoveModeActive={isMoveModeActive}
-        toggleMoveMode={toggleMoveMode}
-        onReset={handleReset}
-      />
-      <main className="flex-grow">
+      
+      <main className="flex-grow relative">
         <GitGraph
           commits={commits}
           branches={branches}
@@ -796,6 +783,22 @@ export default function GitExplorerView() {
           onCommitDrop={handleMoveCommit}
           height={Math.max(graphHeight, 400)}
           width={Math.max(graphWidth, 600)}
+        />
+        
+        {/* Pływające menu kontrolne */}
+        <Controls
+          selectedBranchName={selectedBranchName}
+          selectedCommitId={selectedCommitId}
+          commits={commits}
+          branches={branches}
+          onAddCommit={handleAddCommit}
+          onCreateBranch={handleCreateBranch}
+          onMoveCommit={handleMoveCommit}
+          onMergeBranch={handleMergeBranch}
+          onAddCustomCommits={handleAddCustomCommits}
+          isMoveModeActive={isMoveModeActive}
+          toggleMoveMode={toggleMoveMode}
+          onReset={handleReset}
         />
       </main>
       <footer className="text-center text-sm text-muted-foreground py-2">
