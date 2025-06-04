@@ -362,7 +362,7 @@ export default function GitExplorerView() {
       return;
     }
     const parentCommitForBranch = commits[selectedCommitId];
-    const newBranchName = `${nextBranchNumber}`;
+    const newBranchName = `Custom-branch`;
     // Lane will be determined by recalculateAndAssignLanes
 
     let tempCommitsMap = { ...commits };
@@ -399,7 +399,6 @@ export default function GitExplorerView() {
     setSelectedBranchName(newBranchName);
     setSelectedCommitId(headOfCustomCommits);
     setNextCommitIdx(localNextCommitIdx);
-    setNextBranchNumber(prev => prev + 1);
     toast({ title: "Customisations Applied", description: `Branch ${newBranchName} created with 4 custom commits. Layout updated.` });
   }, [selectedCommitId, commits, branches, nextCommitIdx, nextBranchNumber, toast]);
 
