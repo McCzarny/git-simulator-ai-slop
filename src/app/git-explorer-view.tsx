@@ -251,25 +251,21 @@ export default function GitExplorerView() {
 
     const createCommit = (
       parentIds: string[],
-      messagePrefix: string,
       initialBranchLaneGuess: number,
       depth: number,
-      branchName?: string
+      isCustom: boolean = false
     ): CommitType => {
       const id = `commit-${commitCounter++}`;
-      const commitNumberStr = id.split('-')[1];
-      const message = branchName && branchName !== INITIAL_BRANCH_NAME
-        ? `${messagePrefix} ${commitNumberStr} (on ${branchName})`
-        : `${messagePrefix} ${commitNumberStr}`;
-      return { id, parentIds, message, timestamp: getInitialTimestamp(), branchLane: initialBranchLaneGuess, depth };
+      return { id, parentIds, timestamp: getInitialTimestamp(), branchLane: initialBranchLaneGuess, depth, isCustom };
     };
 
     const appendCommitsToBranch = (
       startingParentCommit: CommitType,
-      branchNameForMessage: string,
+      // branchNameForMessage: string, // No longer needed
       numberOfCommits: number,
       initialLaneGuess: number,
-      targetCommitsMap: Record<string, CommitType>
+      targetCommitsMap: Record<string, CommitType>,
+      isBranchCustom: boolean = false
     ): string => {
       let currentParentIdInSequence = startingParentCommit.id;
       let currentDepthInSequence = startingParentCommit.depth + 1;
@@ -277,10 +273,9 @@ export default function GitExplorerView() {
       for (let i = 0; i < numberOfCommits; i++) {
         const newCommit = createCommit(
           [currentParentIdInSequence],
-          `Commit`,
           initialLaneGuess,
           currentDepthInSequence,
-          branchNameForMessage
+          isBranchCustom
         );
         targetCommitsMap[newCommit.id] = newCommit;
         currentParentIdInSequence = newCommit.id;
@@ -297,7 +292,7 @@ export default function GitExplorerView() {
     for (let i = 0; i < 10; i++) {
       const newCommit = createCommit(
         parentCommitIdMaster ? [parentCommitIdMaster] : [],
-        `Commit`, 0, currentDepthMaster, masterBranchName
+        0, currentDepthMaster
       );
       initialCommits[newCommit.id] = newCommit;
       masterCommitsIds.push(newCommit.id);
@@ -309,17 +304,17 @@ export default function GitExplorerView() {
 
     const branch139Name = '139'; // Forks latest (from master commit 8)
     const parentForBranch139 = initialCommits[masterCommitsIds[7]]; // masterCommitsIds is 0-indexed
-    const branch139HeadId = appendCommitsToBranch(parentForBranch139, branch139Name, 5, 1, initialCommits); // Temp lane 1
+    const branch139HeadId = appendCommitsToBranch(parentForBranch139, 5, 1, initialCommits);
     initialBranches[branch139Name] = { name: branch139Name, headCommitId: branch139HeadId, lane: 1 };
 
     const branch136Name = '136'; // Middle fork (from master commit 5)
     const parentForBranch136 = initialCommits[masterCommitsIds[4]];
-    const branch136HeadId = appendCommitsToBranch(parentForBranch136, branch136Name, 4, 2, initialCommits); // Temp lane 2
+    const branch136HeadId = appendCommitsToBranch(parentForBranch136, 4, 2, initialCommits);
     initialBranches[branch136Name] = { name: branch136Name, headCommitId: branch136HeadId, lane: 2 };
 
     const branch134Name = '134'; // Forks earliest (from master commit 3)
     const parentForBranch134 = initialCommits[masterCommitsIds[2]];
-    const branch134HeadId = appendCommitsToBranch(parentForBranch134, branch134Name, 3, 3, initialCommits); // Temp lane 3
+    const branch134HeadId = appendCommitsToBranch(parentForBranch134, 3, 3, initialCommits);
     initialBranches[branch134Name] = { name: branch134Name, headCommitId: branch134HeadId, lane: 3 };
 
 
@@ -334,7 +329,7 @@ export default function GitExplorerView() {
     setNextCommitIdx(commitCounter);
 
     const numericBranchNames = Object.keys(updatedBranches)
-      .map(name => parseInt(name.split('-')[0], 10)) // Handle names like "140-custom"
+      .map(name => parseInt(name.split('-')[0], 10))
       .filter(num => !isNaN(num));
     const maxBranchNum = numericBranchNames.length > 0 ? Math.max(...numericBranchNames) : (132 -1) ;
     setNextBranchNumber(Math.max(132, maxBranchNum + 1));
@@ -377,30 +372,25 @@ export default function GitExplorerView() {
     }
 
     const newCommitId = `commit-${nextCommitIdx}`;
-    const commitNumberStr = newCommitId.split('-')[1];
-    const message = currentBranch.name !== INITIAL_BRANCH_NAME ? `Commit ${commitNumberStr} (on ${currentBranch.name})` : `Commit ${commitNumberStr}`;
-
     const newCommit: CommitType = {
       id: newCommitId,
       parentIds: [parentCommit.id],
-      message: message,
       timestamp: getNewTimestamp(),
-      branchLane: currentBranch.lane,
+      branchLane: currentBranch.lane, // This will be updated by recalculate, but good initial guess
       depth: parentCommit.depth + 1,
+      // isCustom defaults to false
     };
 
     const newCommitsMap = { ...commits, [newCommitId]: newCommit };
     const newBranchesMap = { ...branches, [currentBranch.name]: { ...currentBranch, headCommitId: newCommitId }};
 
-    // Simple appends might not need full recalculateAndAssignLanes if lane stickiness is desired
-    // and no other branches are affected. However, for consistency with other actions:
     const { updatedCommits, updatedBranches } = recalculateAndAssignLanes(newCommitsMap, newBranchesMap);
     setCommits(updatedCommits);
     setBranches(updatedBranches);
 
     setSelectedCommitId(newCommitId);
     setNextCommitIdx(prev => prev + 1);
-    toast({ title: "Commit Added", description: `${newCommit.message} added to branch ${currentBranch.name}.` });
+    toast({ title: "Commit Added", description: `Commit ${newCommitId} added to branch ${currentBranch.name}.` });
   }, [selectedBranchName, branches, commits, nextCommitIdx, toast, getNewTimestamp]);
 
   const handleCreateBranch = useCallback(() => {
@@ -417,16 +407,14 @@ export default function GitExplorerView() {
     const result = performGitActionAndUpdateLayout((draftCommits, draftBranches) => {
       const newBranchName = `${localNextBranchNumber}`;
       const newCommitId = `commit-${localNextCommitIdx}`;
-      const commitNumberStr = newCommitId.split('-')[1];
-      const message = `Commit ${commitNumberStr} (on ${newBranchName})`;
 
       const newBranchInitialCommit: CommitType = {
           id: newCommitId,
           parentIds: [selectedCommitId],
-          message: message,
           timestamp: newBranchTimestamp,
           branchLane: 0, // Lane will be recalculated
           depth: parentCommitForBranch.depth + 1,
+          // isCustom defaults to false
       };
       const newBranchDef: BranchType = {
           name: newBranchName,
@@ -443,7 +431,7 @@ export default function GitExplorerView() {
     setSelectedCommitId(result.newCommitId);
     setNextCommitIdx(prev => prev + 1);
     setNextBranchNumber(prev => prev + 1);
-    toast({ title: "Branch Created", description: `Branch ${result.newBranchName} created. Layout updated.` });
+    toast({ title: "Branch Created", description: `Branch ${result.newBranchName} created with initial commit ${result.newCommitId}. Layout updated.` });
   }, [selectedCommitId, commits, branches, nextCommitIdx, nextBranchNumber, toast, performGitActionAndUpdateLayout, getNewTimestamp]);
 
   const handleAddCustomCommits = useCallback(() => {
@@ -461,7 +449,7 @@ export default function GitExplorerView() {
     }
 
     const result = performGitActionAndUpdateLayout((draftCommits, draftBranches) => {
-      const newBranchName = `custom`;
+      const newBranchName = `${localNextBranchNumber}-custom`;
 
       let tempParentId = selectedCommitId;
       let tempParentDepth = parentCommitForBranch.depth;
@@ -469,15 +457,13 @@ export default function GitExplorerView() {
 
       for (let i = 0; i < 4; i++) {
         const newCommitId = `commit-${localNextCommitIdx + i}`;
-        const commitNumberStr = newCommitId.split('-')[1];
-        const message = `Custom Commit ${commitNumberStr} (on ${newBranchName})`;
         const newCustomCommit: CommitType = {
           id: newCommitId,
           parentIds: [tempParentId],
-          message: message,
           timestamp: customTimestamps[i],
           branchLane: 0, // Lane will be recalculated
           depth: tempParentDepth + 1,
+          isCustom: true,
         };
         draftCommits[newCommitId] = newCustomCommit;
         tempParentId = newCommitId;
@@ -496,6 +482,7 @@ export default function GitExplorerView() {
     setSelectedBranchName(result.newBranchName);
     setSelectedCommitId(result.headOfCustomCommits);
     setNextCommitIdx(result.updatedNextCommitIdx);
+    setNextBranchNumber(prev => prev + 1); // Increment for the next custom branch
     toast({ title: "Customisations Applied", description: `Branch ${result.newBranchName} created with 4 custom commits. Layout updated.` });
   }, [selectedCommitId, commits, branches, nextCommitIdx, nextBranchNumber, toast, performGitActionAndUpdateLayout, getNewTimestamp]);
 
@@ -606,7 +593,7 @@ export default function GitExplorerView() {
 
     setIsMoveModeActive(false);
     setSelectedCommitId(commitToMoveId);
-    toast({ title: "Commit Moved", description: `Commit re-parented. Layout updated.`});
+    toast({ title: "Commit Moved", description: `Commit ${commitToMoveId} re-parented. Layout updated.`});
   }, [commits, branches, toast, performGitActionAndUpdateLayout, getNewTimestamp]);
 
   const handleMergeBranch = useCallback((sourceBranchNameToMerge: string) => {
@@ -654,16 +641,14 @@ export default function GitExplorerView() {
 
     const result = performGitActionAndUpdateLayout((draftCommits, draftBranches) => {
       const newCommitId = `commit-${localNextCommitIdx}`;
-      const commitNumberStr = newCommitId.split('-')[1];
-      const message = `Merge branch '${sourceBranchNameToMerge}' into '${selectedBranchName}' (commit ${commitNumberStr})`;
 
       const newMergeCommit: CommitType = {
         id: newCommitId,
         parentIds: [targetHeadCommit.id, sourceHeadCommit.id],
-        message: message,
         timestamp: mergeTimestamp,
         branchLane: draftBranches[targetBranch.name].lane, // Will be recalculated, but good initial guess
         depth: Math.max(targetHeadCommit.depth, sourceHeadCommit.depth) + 1,
+        // isCustom defaults to false
       };
 
       draftCommits[newCommitId] = newMergeCommit;
@@ -673,7 +658,7 @@ export default function GitExplorerView() {
 
     setSelectedCommitId(result.newCommitId);
     setNextCommitIdx(prev => prev + 1);
-    toast({ title: "Merge Successful", description: `Branch merged. Layout updated.` });
+    toast({ title: "Merge Successful", description: `Merge commit ${result.newCommitId} created. Layout updated.` });
   }, [selectedBranchName, branches, commits, nextCommitIdx, toast, performGitActionAndUpdateLayout, getNewTimestamp]);
 
 

@@ -22,7 +22,7 @@ export function CommitNode({ commit, isSelected, isBranchHead, isCurrentBranchHe
   const [isBeingDraggedOver, setIsBeingDraggedOver] = useState(false);
 
   let fillColor;
-  if (commit.message.startsWith("Custom Commit")) {
+  if (commit.isCustom) {
     fillColor = 'fill-custom-commit';
   } else if (isCurrentBranchHead) {
     fillColor = 'fill-accent';
@@ -99,7 +99,6 @@ export function CommitNode({ commit, isSelected, isBranchHead, isCurrentBranchHe
         className={`w-4 h-4 text-primary-foreground absolute-center-translate`}
         style={{ transform: 'translate(-8px, -8px)'}}
       />
-      {/* Removed commit message text and tooltip title */}
     </g>
   );
 }

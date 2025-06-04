@@ -17,7 +17,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 interface ControlsProps {
   selectedBranchName: string | null;
   selectedCommitId: string | null;
-  commits: Record<string, CommitType>;
+  commits: Record<string, CommitType>; // Kept for selectedCommitId display if needed
   branches: Record<string, BranchType>;
   onAddCommit: () => void;
   onCreateBranch: () => void;
@@ -31,7 +31,7 @@ interface ControlsProps {
 export function Controls({
   selectedBranchName,
   selectedCommitId,
-  commits,
+  commits, // Still needed for selectedCommitId to get its details for display
   branches,
   onAddCommit,
   onCreateBranch,
@@ -41,7 +41,7 @@ export function Controls({
   isMoveModeActive,
   toggleMoveMode
 }: ControlsProps) {
-  
+
   const [sourceBranchForMerge, setSourceBranchForMerge] = useState<string | null>(null);
 
   const handleMoveTargetSelect = (targetParentId: string) => {
@@ -53,7 +53,7 @@ export function Controls({
     }
     onMoveCommit(selectedCommitId, targetParentId);
   };
-  
+
   const availableCommitsForMove = Object.values(commits).filter(c => c.id !== selectedCommitId);
   const availableBranchesForMerge = selectedBranchName && selectedCommitId && commits[selectedCommitId]
     ? Object.keys(branches).filter(bName => bName !== selectedBranchName && !commits[selectedCommitId!]?.parentIds.includes(branches[bName].headCommitId))
@@ -113,7 +113,7 @@ export function Controls({
           <div className="p-4 border rounded-md bg-secondary/50">
             <p className="text-sm font-medium text-secondary-foreground mb-2">
               <AlertTriangle className="inline mr-2 h-4 w-4 text-amber-500" />
-              Moving commit: <span className="font-bold">{commits[selectedCommitId]?.message.substring(0,8)}</span>. Select new parent:
+              Moving commit: <span className="font-bold">{selectedCommitId}</span>. Select new parent:
             </p>
             <Select onValueChange={handleMoveTargetSelect} disabled={availableCommitsForMove.length === 0 || !selectedCommitId}>
               <SelectTrigger className="w-full">
@@ -122,7 +122,7 @@ export function Controls({
               <SelectContent>
                 {availableCommitsForMove.map(commit => (
                   <SelectItem key={commit.id} value={commit.id}>
-                    {commit.message.substring(0,8)} (ID: {commit.id})
+                    Commit ID: {commit.id}
                   </SelectItem>
                 ))}
                 {availableCommitsForMove.length === 0 && (
@@ -142,8 +142,8 @@ export function Controls({
               Merge into <span className="font-bold">{selectedBranchName}</span>:
             </p>
             <div className="flex gap-2">
-              <Select 
-                onValueChange={setSourceBranchForMerge} 
+              <Select
+                onValueChange={setSourceBranchForMerge}
                 value={sourceBranchForMerge || ""}
                 disabled={availableBranchesForMerge.length === 0}
               >
@@ -153,7 +153,7 @@ export function Controls({
                 <SelectContent>
                   {availableBranchesForMerge.map(branchName => (
                     <SelectItem key={branchName} value={branchName}>
-                      {branchName} (Head: {commits[branches[branchName].headCommitId]?.message.substring(0,8)})
+                      {branchName} (Head: {branches[branchName].headCommitId})
                     </SelectItem>
                   ))}
                   {availableBranchesForMerge.length === 0 && (
@@ -171,13 +171,12 @@ export function Controls({
             </div>
           </div>
         )}
-        
+
         <div className="text-sm text-muted-foreground pt-2">
           {selectedBranchName && <p>Selected Branch: <span className="font-semibold text-primary">{selectedBranchName}</span></p>}
-          {selectedCommitId && <p>Selected Commit: <span className="font-semibold text-accent">{commits[selectedCommitId]?.message.substring(0,8)}</span></p>}
+          {selectedCommitId && <p>Selected Commit ID: <span className="font-semibold text-accent">{selectedCommitId}</span></p>}
         </div>
       </CardContent>
     </Card>
   );
 }
-
