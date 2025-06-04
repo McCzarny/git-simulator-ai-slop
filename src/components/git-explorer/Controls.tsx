@@ -2,7 +2,7 @@
 "use client";
 
 import { Button } from '@/components/ui/button';
-import { GitCommit, GitBranchPlus, MoveIcon, AlertTriangle, GitMergeIcon } from 'lucide-react';
+import { GitCommit, GitBranchPlus, MoveIcon, AlertTriangle, GitMergeIcon, Layers } from 'lucide-react';
 import {
   Select,
   SelectContent,
@@ -11,18 +11,19 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import type { CommitType, BranchType } from '@/types/git';
-import React, { useState } from 'react'; // Added React and useState
+import React, { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 interface ControlsProps {
   selectedBranchName: string | null;
   selectedCommitId: string | null;
   commits: Record<string, CommitType>;
-  branches: Record<string, BranchType>; // Added branches
+  branches: Record<string, BranchType>;
   onAddCommit: () => void;
   onCreateBranch: () => void;
   onMoveCommit: (commitToMoveId: string, targetParentId: string) => void;
-  onMergeBranch: (sourceBranchName: string) => void; // Added onMergeBranch
+  onMergeBranch: (sourceBranchName: string) => void;
+  onAddCustomCommits: () => void; // New prop
   isMoveModeActive: boolean;
   toggleMoveMode: () => void;
 }
@@ -31,11 +32,12 @@ export function Controls({
   selectedBranchName,
   selectedCommitId,
   commits,
-  branches, // Destructure branches
+  branches,
   onAddCommit,
   onCreateBranch,
   onMoveCommit,
-  onMergeBranch, // Destructure onMergeBranch
+  onMergeBranch,
+  onAddCustomCommits, // Destructure new prop
   isMoveModeActive,
   toggleMoveMode
 }: ControlsProps) {
@@ -96,6 +98,14 @@ export function Controls({
             aria-label={isMoveModeActive ? "Cancel Move Commit (or use drag-and-drop)" : "Initiate Move Commit (or use drag-and-drop)"}
           >
             <MoveIcon className="mr-2 h-4 w-4" /> {isMoveModeActive ? 'Cancel Move' : 'Move Commit'}
+          </Button>
+          <Button
+            onClick={onAddCustomCommits}
+            disabled={!selectedBranchName || isMoveModeActive}
+            aria-label="Add 4 custom commits to selected branch"
+            variant="outline"
+          >
+            <Layers className="mr-2 h-4 w-4" /> Apply Customisations
           </Button>
         </div>
 
