@@ -71,6 +71,7 @@ export function CommitNode({ commit, isSelected, isBranchHead, isCurrentBranchHe
     if (draggedCommitId && draggedCommitId !== targetParentId) {
       onCommitDrop(draggedCommitId, targetParentId);
     } else if (draggedCommitId === targetParentId) {
+      // Consider a toast or a more visible warning for self-drop
       console.warn("Attempted to drop a commit on itself.");
     }
   };
@@ -96,9 +97,10 @@ export function CommitNode({ commit, isSelected, isBranchHead, isCurrentBranchHe
         strokeWidth={currentStrokeWidth}
       />
       <GitCommit
-        className={`w-4 h-4 text-primary-foreground absolute-center-translate`}
+        className={`w-4 h-4 text-primary-foreground`}
         style={{ transform: 'translate(-8px, -8px)'}}
       />
+      <title>{`Commit: ${commit.id}`}</title>
     </g>
   );
 }
