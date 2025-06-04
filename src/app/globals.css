@@ -1,3 +1,4 @@
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -35,6 +36,8 @@ body {
     --border: 210 20% 80%;
     --input: 210 20% 85%;
     --ring: 210 70% 55%; /* Slightly adjusted primary for focus rings */
+
+    --custom-commit: 30 100% 50%; /* Orange for custom commits */
 
     --chart-1: 12 76% 61%;
     --chart-2: 173 58% 39%;
@@ -82,6 +85,8 @@ body {
     --border: 210 20% 30%;
     --input: 210 20% 25%;
     --ring: 210 70% 55%;
+
+    --custom-commit: 30 90% 55%; /* Adjusted orange for dark mode */
     
     --chart-1: 220 70% 50%;
     --chart-2: 160 60% 45%;

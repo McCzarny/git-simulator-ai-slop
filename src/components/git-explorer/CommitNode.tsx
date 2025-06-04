@@ -16,12 +16,21 @@ interface CommitNodeProps {
 
 const COMMIT_RADIUS = 12; // Reduced from 20
 const SELECTED_STROKE_WIDTH = 2; // Adjusted for smaller radius
-const DRAG_OVER_STROKE_COLOR = 'stroke-blue-500';
+const DRAG_OVER_STROKE_COLOR = 'stroke-blue-500'; // Using a distinct color for drag over
 
 export function CommitNode({ commit, isSelected, isBranchHead, isCurrentBranchHead, onSelect, onCommitDrop }: CommitNodeProps) {
   const [isBeingDraggedOver, setIsBeingDraggedOver] = useState(false);
 
-  const fillColor = isCurrentBranchHead ? 'fill-accent' : (isBranchHead ? 'fill-primary' : 'fill-secondary');
+  let fillColor;
+  if (commit.message.startsWith("Custom Commit")) {
+    fillColor = 'fill-custom-commit';
+  } else if (isCurrentBranchHead) {
+    fillColor = 'fill-accent';
+  } else if (isBranchHead) {
+    fillColor = 'fill-primary';
+  } else {
+    fillColor = 'fill-secondary';
+  }
 
   let strokeColorClass = isSelected ? 'stroke-accent' : 'stroke-primary';
   let currentStrokeWidth = isSelected ? SELECTED_STROKE_WIDTH : 1;
@@ -43,6 +52,7 @@ export function CommitNode({ commit, isSelected, isBranchHead, isCurrentBranchHe
 
   const handleDragEnter = (event: React.DragEvent<SVGGElement>) => {
     event.preventDefault();
+    // Check if the item being dragged is actually a commit
     if (event.dataTransfer.types.includes('application/x-git-commit-id')) {
       setIsBeingDraggedOver(true);
     }
@@ -62,6 +72,8 @@ export function CommitNode({ commit, isSelected, isBranchHead, isCurrentBranchHe
     if (draggedCommitId && draggedCommitId !== targetParentId) {
       onCommitDrop(draggedCommitId, targetParentId);
     } else if (draggedCommitId === targetParentId) {
+      // This case should ideally be prevented by not allowing drop on self,
+      // but a warning is good for debugging.
       console.warn("Attempted to drop a commit on itself.");
     }
   };
