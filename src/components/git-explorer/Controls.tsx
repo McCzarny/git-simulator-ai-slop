@@ -12,6 +12,7 @@ import {
 import type { CommitType, BranchType } from '@/types/git';
 import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from '@/components/ui/input';
 
 interface ControlsProps {
   selectedBranchName: string | null;
@@ -20,12 +21,12 @@ interface ControlsProps {
   branches: Record<string, BranchType>;
   onAddCommit: () => void;
   onCreateBranch: () => void;
-  onMoveCommit: (commitToMoveId: string, targetParentId: string) => void;
   onMergeBranch: (sourceBranchName: string) => void;
   onAddCustomCommits: () => void;
-  isMoveModeActive: boolean;
-  toggleMoveMode: () => void;
   onReset: () => void;
+  showCommitLabels: boolean;
+  onToggleShowCommitLabels: () => void;
+  onUpdateCommitLabel: (commitId: string, label: string) => void;
 }
 
 export function Controls({
@@ -35,19 +36,28 @@ export function Controls({
   branches,
   onAddCommit,
   onCreateBranch,
-  onMoveCommit,
   onMergeBranch,
   onAddCustomCommits,
-  isMoveModeActive,
-  toggleMoveMode,
-  onReset
+  onReset,
+  showCommitLabels,
+  onToggleShowCommitLabels,
+  onUpdateCommitLabel,
 }: ControlsProps) {
 
   const [sourceBranchForMerge, setSourceBranchForMerge] = useState<string | null>(null);
+  const [commitLabel, setCommitLabel] = useState('');
   const [isExpanded, setIsExpanded] = useState<boolean>(true); // Domyślnie rozwinięte menu
   const [position, setPosition] = useState({ x: 20, y: 20 }); // Tymczasowa pozycja początkowa
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+
+  useEffect(() => {
+    if (selectedCommitId && commits[selectedCommitId]) {
+      setCommitLabel(commits[selectedCommitId].label || '');
+    } else {
+      setCommitLabel('');
+    }
+  }, [selectedCommitId, commits]);
 
   // Ładowanie zapisanej pozycji menu
   useEffect(() => {
@@ -148,7 +158,6 @@ export function Controls({
     if(targetParentId === selectedCommitId){
       return;
     }
-    onMoveCommit(selectedCommitId, targetParentId);
   };
 
   const availableCommitsForMove = Object.values(commits).filter(c => c.id !== selectedCommitId);
@@ -201,7 +210,7 @@ export function Controls({
           <div className="flex flex-wrap gap-2">
             <Button
               onClick={onAddCommit}
-              disabled={!selectedBranchName || isMoveModeActive}
+              disabled={!selectedBranchName}
               aria-label="Add new commit to selected branch"
               variant="outline"
               size="sm"
@@ -210,7 +219,7 @@ export function Controls({
             </Button>
             <Button
               onClick={onCreateBranch}
-              disabled={!selectedCommitId || isMoveModeActive}
+              disabled={!selectedCommitId}
               aria-label="Create new branch from selected commit"
               variant="outline"
               size="sm"
@@ -218,17 +227,8 @@ export function Controls({
               <GitBranchPlus className="mr-1 h-3.5 w-3.5" /> Create Branch
             </Button>
             <Button
-              onClick={toggleMoveMode}
-              disabled={!selectedCommitId}
-              variant={isMoveModeActive ? "destructive" : "outline"}
-              aria-label={isMoveModeActive ? "Cancel Move Commit (or use drag-and-drop)" : "Initiate Move Commit (or use drag-and-drop)"}
-              size="sm"
-            >
-              <MoveIcon className="mr-1 h-3.5 w-3.5" /> {isMoveModeActive ? 'Cancel Move' : 'Move Commit'}
-            </Button>
-            <Button
               onClick={onAddCustomCommits}
-              disabled={!selectedCommitId || isMoveModeActive}
+              disabled={!selectedCommitId}
               aria-label="Create new branch with 4 custom commits from selected commit"
               variant="outline"
               size="sm"
@@ -243,33 +243,38 @@ export function Controls({
             >
               Reset
             </Button>
+            <Button
+                onClick={onToggleShowCommitLabels}
+                variant="outline"
+                size="sm"
+                aria-label={showCommitLabels ? "Hide commit labels" : "Show commit labels"}
+            >
+                {showCommitLabels ? "Hide Labels" : "Show Labels"}
+            </Button>
           </div>
 
-          {isMoveModeActive && selectedCommitId && (
+          {selectedCommitId && (
             <div className="p-3 border rounded-md bg-secondary/50">
               <p className="text-xs font-medium text-secondary-foreground mb-2">
-                <AlertTriangle className="inline mr-1 h-3.5 w-3.5 text-amber-500" />
-                Moving commit: <span className="font-bold">{selectedCommitId}</span>. Select new parent:
+                Label for commit <span className="font-bold">{selectedCommitId}</span>:
               </p>
-              <Select onValueChange={handleMoveTargetSelect} disabled={availableCommitsForMove.length === 0 || !selectedCommitId}>
-                <SelectTrigger className="w-full h-8 text-xs">
-                  <SelectValue placeholder="Select target parent commit..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableCommitsForMove.map(commit => (
-                    <SelectItem key={commit.id} value={commit.id} className="text-xs">
-                      Commit ID: {commit.id}
-                    </SelectItem>
-                  ))}
-                  {availableCommitsForMove.length === 0 && (
-                    <div className="p-2 text-xs text-muted-foreground">No other commits available to be parent.</div>
-                  )}
-                </SelectContent>
-              </Select>
+              <Input
+                type="text"
+                placeholder="Enter commit label..."
+                value={commitLabel}
+                onChange={(e) => setCommitLabel(e.target.value)}
+                onBlur={() => onUpdateCommitLabel(selectedCommitId, commitLabel)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    onUpdateCommitLabel(selectedCommitId, commitLabel);
+                  }
+                }}
+                className="h-8 text-xs"
+              />
             </div>
           )}
 
-          {!isMoveModeActive && selectedBranchName && (
+          {selectedBranchName && (
             <div className="p-3 border rounded-md bg-secondary/50">
               <p className="text-xs font-medium text-secondary-foreground mb-2">
                 Merge into <span className="font-bold">{selectedBranchName}</span>:
@@ -309,6 +314,9 @@ export function Controls({
           <div className="text-xs text-muted-foreground pt-1">
             {selectedBranchName && <p>Selected Branch: <span className="font-semibold text-primary">{selectedBranchName}</span></p>}
             {selectedCommitId && <p>Selected Commit ID: <span className="font-semibold text-accent">{selectedCommitId}</span></p>}
+            {selectedCommitId && commits[selectedCommitId] && commits[selectedCommitId].parentIds.length > 0 && (
+              <p>Commit parents: <span className="font-semibold text-accent">{commits[selectedCommitId].parentIds.join(', ')}</span></p>
+            )}
           </div>
         </CardContent>
       )}

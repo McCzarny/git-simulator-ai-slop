@@ -1,9 +1,8 @@
-
 "use client";
 
 import type { PositionedCommit } from '@/types/git';
 import { GitCommit } from 'lucide-react';
-import React, { useState } from 'react';
+import React from 'react';
 
 interface CommitNodeProps {
   commit: PositionedCommit;
@@ -11,16 +10,13 @@ interface CommitNodeProps {
   isBranchHead: boolean;
   isCurrentBranchHead: boolean;
   onSelect: (commitId: string) => void;
-  onCommitDrop: (draggedCommitId: string, targetParentId: string) => void;
+  showLabel: boolean;
 }
 
 const COMMIT_RADIUS = 12;
 const SELECTED_STROKE_WIDTH = 2;
-const DRAG_OVER_STROKE_COLOR = 'stroke-blue-500';
 
-export function CommitNode({ commit, isSelected, isBranchHead, isCurrentBranchHead, onSelect, onCommitDrop }: CommitNodeProps) {
-  const [isBeingDraggedOver, setIsBeingDraggedOver] = useState(false);
-
+export function CommitNode({ commit, isSelected, isBranchHead, isCurrentBranchHead, onSelect, showLabel }: CommitNodeProps) {
   let fillColor;
   if (commit.isCustom) {
     fillColor = 'fill-custom-commit';
@@ -32,49 +28,8 @@ export function CommitNode({ commit, isSelected, isBranchHead, isCurrentBranchHe
     fillColor = 'fill-secondary';
   }
 
-  let strokeColorClass = isSelected ? 'stroke-accent' : 'stroke-primary';
-  let currentStrokeWidth = isSelected ? SELECTED_STROKE_WIDTH : 1;
-
-  if (isBeingDraggedOver) {
-    strokeColorClass = DRAG_OVER_STROKE_COLOR;
-    currentStrokeWidth = SELECTED_STROKE_WIDTH + 1;
-  }
-
-  const handleDragStart = (event: React.DragEvent<SVGGElement>) => {
-    event.dataTransfer.setData('application/x-git-commit-id', commit.id);
-    event.dataTransfer.effectAllowed = 'move';
-  };
-
-  const handleDragOver = (event: React.DragEvent<SVGGElement>) => {
-    event.preventDefault();
-    event.dataTransfer.dropEffect = 'move';
-  };
-
-  const handleDragEnter = (event: React.DragEvent<SVGGElement>) => {
-    event.preventDefault();
-    if (event.dataTransfer.types.includes('application/x-git-commit-id')) {
-      setIsBeingDraggedOver(true);
-    }
-  };
-
-  const handleDragLeave = (event: React.DragEvent<SVGGElement>) => {
-    event.preventDefault();
-    setIsBeingDraggedOver(false);
-  };
-
-  const handleDrop = (event: React.DragEvent<SVGGElement>) => {
-    event.preventDefault();
-    setIsBeingDraggedOver(false);
-    const draggedCommitId = event.dataTransfer.getData('application/x-git-commit-id');
-    const targetParentId = commit.id;
-
-    if (draggedCommitId && draggedCommitId !== targetParentId) {
-      onCommitDrop(draggedCommitId, targetParentId);
-    } else if (draggedCommitId === targetParentId) {
-      // Consider a toast or a more visible warning for self-drop
-      console.warn("Attempted to drop a commit on itself.");
-    }
-  };
+  const strokeColorClass = isSelected ? 'stroke-accent' : 'stroke-primary';
+  const currentStrokeWidth = isSelected ? SELECTED_STROKE_WIDTH : 1;
 
   return (
     <g
@@ -82,11 +37,6 @@ export function CommitNode({ commit, isSelected, isBranchHead, isCurrentBranchHe
       onClick={() => onSelect(commit.id)}
       className="cursor-pointer group"
       aria-label={`Commit ID ${commit.id}`}
-      onDragStart={handleDragStart}
-      onDragOver={handleDragOver}
-      onDragEnter={handleDragEnter}
-      onDragLeave={handleDragLeave}
-      onDrop={handleDrop}
     >
       <circle
         cx={0}
@@ -102,6 +52,30 @@ export function CommitNode({ commit, isSelected, isBranchHead, isCurrentBranchHe
           height={16} 
         />
       </g>
+      {showLabel && (
+        <text
+          x="0"
+          y={COMMIT_RADIUS + 14}
+          textAnchor="middle"
+          fontSize="10"
+          className="fill-muted-foreground"
+          style={{ pointerEvents: 'none', userSelect: 'none' }}
+        >
+          {commit.id}
+        </text>
+      )}
+      {commit.label && (
+        <text
+          x="0"
+          y={-COMMIT_RADIUS - 5}
+          textAnchor="middle"
+          fontSize="10"
+          className="fill-primary font-semibold"
+          style={{ pointerEvents: 'none', userSelect: 'none' }}
+        >
+          {commit.label}
+        </text>
+      )}
       <title>{`Commit: ${commit.id}`}</title>
     </g>
   );

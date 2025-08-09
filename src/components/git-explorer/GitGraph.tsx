@@ -1,4 +1,3 @@
-
 "use client";
 
 import type { BranchType, CommitType, Edge, PositionedCommit } from '@/types/git';
@@ -15,9 +14,9 @@ interface GitGraphProps {
   selectedBranchName: string | null;
   onCommitSelect: (commitId: string) => void;
   onBranchSelect: (branchName: string) => void;
-  onCommitDrop: (draggedCommitId: string, targetParentId: string) => void;
   height: number;
   width: number;
+  showCommitLabels: boolean;
 }
 
 const ARROW_MARKER_ID = "arrow-marker";
@@ -32,14 +31,31 @@ export function GitGraph({
   selectedBranchName,
   onCommitSelect,
   onBranchSelect,
-  onCommitDrop,
   height,
   width,
+  showCommitLabels,
 }: GitGraphProps) {
   if (!positionedCommits.length) {
     return <div className="text-center p-8 text-muted-foreground">No commits to display.</div>;
   }
-  
+
+  // Collision detection: warn if any two nodes overlap (same or very close x/y)
+  const COLLISION_THRESHOLD = 2; // px, adjust as needed
+  for (let i = 0; i < positionedCommits.length; i++) {
+    for (let j = i + 1; j < positionedCommits.length; j++) {
+      const a = positionedCommits[i];
+      const b = positionedCommits[j];
+      const dx = Math.abs(a.x - b.x);
+      const dy = Math.abs(a.y - b.y);
+      if (dx < COLLISION_THRESHOLD && dy < COLLISION_THRESHOLD) {
+        // eslint-disable-next-line no-console
+        console.warn(
+          `COLLISION: Commits '${a.id}' and '${b.id}' overlap at (${a.x}, ${a.y}) ≈ (${b.x}, ${b.y})`
+        );
+      }
+    }
+  }
+
   const headCommitsByBranch = Object.fromEntries(
     Object.values(branches).map(b => [b.name, b.headCommitId])
   );
@@ -108,7 +124,7 @@ export function GitGraph({
               isBranchHead={commitIsBranchHead(commit.id)}
               isCurrentBranchHead={selectedBranchName ? branches[selectedBranchName]?.headCommitId === commit.id : false}
               onSelect={onCommitSelect}
-              onCommitDrop={onCommitDrop}
+              showLabel={showCommitLabels}
             />
           ))}
         </g>

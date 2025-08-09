@@ -1,4 +1,3 @@
-
 export interface CommitType {
   id: string;
   parentIds: string[];
@@ -6,6 +5,7 @@ export interface CommitType {
   branchLane: number; // For X position calculation
   depth: number; // For Y position calculation
   isCustom?: boolean; // To flag custom commits for styling
+  label?: string; // Optional label for the commit
   // x and y coordinates are purely presentational and will be part of PositionedCommit
 }
 
