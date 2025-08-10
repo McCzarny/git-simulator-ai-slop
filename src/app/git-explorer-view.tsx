@@ -178,10 +178,35 @@ function calculateLayout(
   let maxX = 0;
   let maxY = 0;
   const tempPositionedCommitsMap: Record<string, PositionedCommit> = {};
+  const usedPositions = new Set<string>(); // Track used positions to avoid collisions
 
   for (const commitData of sortedCommits) {
-    const xPos = (commitData.branchLane || 0) * X_SPACING + GRAPH_PADDING;
-    const yPos = commitData.depth * Y_SPACING + GRAPH_PADDING;
+    let xPos = (commitData.branchLane || 0) * X_SPACING + GRAPH_PADDING;
+    let yPos = commitData.depth * Y_SPACING + GRAPH_PADDING;
+
+    // Check for collision and resolve by adjusting position
+    let positionKey = `${xPos},${yPos}`;
+    let offsetX = 0;
+    let offsetY = 0;
+
+    // If position is already used, find an alternative
+    while (usedPositions.has(positionKey)) {
+      // First try to offset horizontally (slight right shift)
+      if (offsetX < X_SPACING * 0.7) {
+        offsetX += 20; // Small horizontal offset
+        xPos = (commitData.branchLane || 0) * X_SPACING + GRAPH_PADDING + offsetX;
+      } else {
+        // If horizontal offset is too large, try vertical offset
+        offsetY += 15; // Small vertical offset
+        offsetX = 0; // Reset horizontal offset
+        xPos = (commitData.branchLane || 0) * X_SPACING + GRAPH_PADDING;
+        yPos = commitData.depth * Y_SPACING + GRAPH_PADDING + offsetY;
+      }
+      positionKey = `${xPos},${yPos}`;
+    }
+
+    // Mark this position as used
+    usedPositions.add(positionKey);
 
     const positionedCommit: PositionedCommit = {
       ...commitData,
@@ -195,7 +220,9 @@ function calculateLayout(
     maxY = Math.max(maxY, yPos);
   }
 
-  for (const currentPositionedCommit of positionedCommits) {
+  // Create edges after all commits have been positioned
+  for (const commitId in tempPositionedCommitsMap) {
+    const currentPositionedCommit = tempPositionedCommitsMap[commitId];
     currentPositionedCommit.parentIds.forEach(parentId => {
       const parentPositionedCommit = tempPositionedCommitsMap[parentId];
       if (parentPositionedCommit) {
@@ -224,8 +251,21 @@ export default function GitExplorerView() {
   const [nextCustomSuffix, setNextCustomSuffix] = useState(1);
   const [nextSharedTimestamp, setNextSharedTimestamp] = useState(Date.now());
 
+  const [showCommitLabels, setShowCommitLabels] = useState(false);
 
-  const [isMoveModeActive, setIsMoveModeActive] = useState(false);
+  const toggleShowCommitLabels = useCallback(() => {
+    setShowCommitLabels(prev => !prev);
+  }, []);
+
+  const handleUpdateCommitLabel = useCallback((commitId: string, label: string) => {
+    setCommits(prevCommits => {
+      const newCommits = { ...prevCommits };
+      if (newCommits[commitId]) {
+        newCommits[commitId] = { ...newCommits[commitId], label };
+      }
+      return newCommits;
+    });
+  }, []);
 
   const getNewTimestamp = useCallback(() => {
     const ts = nextSharedTimestamp;
@@ -293,6 +333,9 @@ export default function GitExplorerView() {
         parentCommitIdMaster ? [parentCommitIdMaster] : [],
         0, currentDepthMaster
       );
+      if (i === 0) {
+        newCommit.label = "Initial commit";
+      }
       initialCommits[newCommit.id] = newCommit;
       masterCommitsIds.push(newCommit.id);
       parentCommitIdMaster = newCommit.id;
@@ -492,117 +535,19 @@ export default function GitExplorerView() {
 
   const handleSelectCommit = useCallback((commitId: string) => {
     setSelectedCommitId(commitId);
-    if (isMoveModeActive) {
-        setIsMoveModeActive(false);
-    }
-  }, [isMoveModeActive]);
+  }, []);
 
   const handleSelectBranch = useCallback((branchName: string) => {
     setSelectedBranchName(branchName);
     if (branches[branchName]) {
       setSelectedCommitId(branches[branchName].headCommitId);
     }
-    setIsMoveModeActive(false);
   }, [branches]);
-
-  const toggleMoveMode = useCallback(() => {
-    if (!selectedCommitId && !isMoveModeActive) {
-      toast({ title: "Error", description: "Select a commit to move first.", variant: "destructive"});
-      setIsMoveModeActive(false);
-      return;
-    }
-    setIsMoveModeActive(prev => !prev);
-  }, [selectedCommitId, isMoveModeActive, toast]);
-
-
-  const handleMoveCommit = useCallback((commitToMoveId: string, newParentId: string) => {
-    if (!commits[commitToMoveId] || !commits[newParentId]) {
-      toast({ title: "Error", description: "Invalid commit for move operation.", variant: "destructive"});
-      setIsMoveModeActive(false); return;
-    }
-    if (commitToMoveId === newParentId) {
-      toast({ title: "Error", description: "Cannot move a commit onto itself.", variant: "destructive"});
-      setIsMoveModeActive(false); return;
-    }
-
-    let isCyclic = false;
-    const q_descendants: string[] = [commitToMoveId];
-    const visited_descendants = new Set<string>([commitToMoveId]);
-    let head_desc = 0;
-    while(head_desc < q_descendants.length) {
-        const current_descendant = q_descendants[head_desc++];
-        if (current_descendant === newParentId) { isCyclic = true; break; }
-
-        Object.values(commits).forEach(commit => {
-            if (commit.parentIds.includes(current_descendant) && !visited_descendants.has(commit.id)) {
-                visited_descendants.add(commit.id);
-                q_descendants.push(commit.id);
-            }
-        });
-    }
-    if (isCyclic) {
-         toast({ title: "Error", description: "Cannot move commit: creates a cycle.", variant: "destructive"});
-         setIsMoveModeActive(false); return;
-    }
-
-    const movedCommitTime = getNewTimestamp();
-
-
-    performGitActionAndUpdateLayout((draftCommits, _draftBranches) => {
-      const sourceCommit = draftCommits[commitToMoveId];
-      const targetParentCommit = draftCommits[newParentId];
-
-      draftCommits[commitToMoveId] = {
-        ...sourceCommit,
-        parentIds: [newParentId],
-        depth: targetParentCommit.depth + 1,
-        timestamp: movedCommitTime,
-      };
-
-      const queue: { commitId: string; newDepth: number; }[] = [
-        { commitId: commitToMoveId, newDepth: targetParentCommit.depth + 1 }
-      ];
-      const visitedInThisBFSRecalculation = new Set<string>([commitToMoveId]);
-      let head = 0;
-      let descendantTimestampCounter = 1;
-
-      while (head < queue.length) {
-          const { commitId: currentProcessedParentId, newDepth: currentParentDepth } = queue[head++];
-
-          const potentialChildIds = Object.keys(draftCommits);
-
-          for (const potentialChildId of potentialChildIds) {
-              const potentialChildCommit = draftCommits[potentialChildId];
-              if (potentialChildCommit && potentialChildCommit.parentIds.includes(currentProcessedParentId) &&
-                  !visitedInThisBFSRecalculation.has(potentialChildId)) {
-
-                   const childNewTimestamp = movedCommitTime + descendantTimestampCounter++;
-
-                   draftCommits[potentialChildId] = {
-                      ...potentialChildCommit,
-                      depth: currentParentDepth + 1,
-                      timestamp: childNewTimestamp,
-                  };
-                  visitedInThisBFSRecalculation.add(potentialChildId);
-                  queue.push({
-                      commitId: potentialChildId,
-                      newDepth: currentParentDepth + 1,
-                  });
-              }
-          }
-      }
-    }, commits, branches);
-
-    setIsMoveModeActive(false);
-    setSelectedCommitId(commitToMoveId);
-    toast({ title: "Commit Moved", description: `Commit ${commitToMoveId} re-parented. Layout updated.`});
-  }, [commits, branches, toast, performGitActionAndUpdateLayout, getNewTimestamp]);
 
   const handleMergeBranch = useCallback((sourceBranchNameToMerge: string) => {
     if (!selectedBranchName || !branches[selectedBranchName]) {
       toast({ title: "Error", description: "No target branch selected for merge.", variant: "destructive" }); return;
     }
-    const targetBranch = branches[selectedBranchName];
     if (!branches[sourceBranchNameToMerge]) {
       toast({ title: "Error", description: "Source branch for merge not found.", variant: "destructive" }); return;
     }
@@ -610,6 +555,7 @@ export default function GitExplorerView() {
       toast({ title: "Error", description: "Cannot merge a branch into itself.", variant: "destructive" }); return;
     }
 
+    const targetBranch = branches[selectedBranchName];
     const sourceBranch = branches[sourceBranchNameToMerge];
     const targetHeadCommit = commits[targetBranch.headCommitId];
     const sourceHeadCommit = commits[sourceBranch.headCommitId];
@@ -618,11 +564,9 @@ export default function GitExplorerView() {
       toast({ title: "Error", description: "Head commit not found for one or both branches.", variant: "destructive" }); return;
     }
 
-    let current = targetHeadCommit;
+    // Check if already merged (target contains source)
     const visitedAncestors = new Set<string>();
-    const q_anc: string[] = [];
-    if(commits[current.id]) q_anc.push(current.id);
-
+    const q_anc: string[] = [targetHeadCommit.id];
     let head_anc = 0;
     while(head_anc < q_anc.length){
         const currentId = q_anc[head_anc++];
@@ -630,37 +574,78 @@ export default function GitExplorerView() {
         visitedAncestors.add(currentId);
         const commitNode = commits[currentId];
         if(!commitNode) continue;
-
         if(commitNode.id === sourceHeadCommit.id){
             toast({ title: "Already Merged", description: `Branch ${sourceBranchNameToMerge} is already an ancestor of ${selectedBranchName}. No merge needed.`, variant: "default"}); return;
         }
         commitNode.parentIds.forEach(pid => { if(commits[pid] && !visitedAncestors.has(pid)){ q_anc.push(pid); } })
     }
 
+    // Check for fast-forward: if target is ancestor of source
+    const visitedSourceAncestors = new Set<string>();
+    const q_source: string[] = [sourceHeadCommit.id];
+    let head_source = 0;
+    while(head_source < q_source.length){
+        const currentId = q_source[head_source++];
+        if(visitedSourceAncestors.has(currentId)) continue;
+        visitedSourceAncestors.add(currentId);
+        const commitNode = commits[currentId];
+        if(!commitNode) continue;
+        if(commitNode.id === targetHeadCommit.id){
+            // Fast-forward
+            const result = performGitActionAndUpdateLayout((draftCommits, draftBranches) => {
+              draftBranches[targetBranch.name] = { ...draftBranches[targetBranch.name], headCommitId: sourceHeadCommit.id };
+              return { fastForward: true, newHeadId: sourceHeadCommit.id };
+            }, commits, branches);
+            setSelectedCommitId(sourceHeadCommit.id);
+            toast({ title: "Fast-Forward Merge", description: `${selectedBranchName} fast-forwarded to ${sourceBranchNameToMerge}.` });
+            return;
+        }
+        commitNode.parentIds.forEach(pid => { if(commits[pid] && !visitedSourceAncestors.has(pid)){ q_source.push(pid); } })
+    }
+
+    // Standard merge: always create a new commit with two parents (HEAD master, HEAD source)
     const localNextCommitIdx = nextCommitIdx;
     const mergeTimestamp = getNewTimestamp();
+    const newCommitId = `merge-commit-${localNextCommitIdx}`;
+    const newMergeCommit: CommitType = {
+      id: newCommitId,
+      parentIds: [targetHeadCommit.id, sourceHeadCommit.id],
+      timestamp: mergeTimestamp,
+      branchLane: branches[sourceBranch.name].lane,
+      depth: Math.max(targetHeadCommit.depth, sourceHeadCommit.depth) + 1,
+      isCustom: false,
+    };
+    const updatedCommits = { ...commits, [newCommitId]: newMergeCommit };
+    const updatedBranches = { ...branches, [targetBranch.name]: { ...branches[targetBranch.name], headCommitId: newCommitId }};
 
-    const result = performGitActionAndUpdateLayout((draftCommits, draftBranches) => {
-      const newCommitId = `commit-${localNextCommitIdx}`;
+    setCommits(updatedCommits);
+    setBranches(updatedBranches);
 
-      const newMergeCommit: CommitType = {
-        id: newCommitId,
-        parentIds: [targetHeadCommit.id, sourceHeadCommit.id],
-        timestamp: mergeTimestamp,
-        branchLane: draftBranches[targetBranch.name].lane, 
-        depth: Math.max(targetHeadCommit.depth, sourceHeadCommit.depth) + 1,
-        isCustom: false,
+    setSelectedCommitId(newCommitId);
+    setNextCommitIdx(prev => prev + 1);
+    toast({ title: "Merge Successful", description: `Merge commit ${newCommitId} created. Layout updated.` });
+  }, [selectedBranchName, branches, commits, nextCommitIdx, toast, performGitActionAndUpdateLayout, getNewTimestamp]);
+
+  // Debug function to inspect commit structure - expose to window for manual testing
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      (window as any).setTestGraph = (testCommits: Record<string, CommitType>, testBranches: Record<string, BranchType>) => {
+        setCommits(testCommits);
+        setBranches(testBranches);
       };
 
-      draftCommits[newCommitId] = newMergeCommit;
-      draftBranches[targetBranch.name] = { ...draftBranches[targetBranch.name], headCommitId: newCommitId };
-      return { newCommitId };
-    }, commits, branches);
+      (window as any).getGraphState = () => {
+        return {
+          commits,
+          branches,
+        };
+      };
 
-    setSelectedCommitId(result.newCommitId);
-    setNextCommitIdx(prev => prev + 1);
-    toast({ title: "Merge Successful", description: `Merge commit ${result.newCommitId} created. Layout updated.` });
-  }, [selectedBranchName, branches, commits, nextCommitIdx, toast, performGitActionAndUpdateLayout, getNewTimestamp]);
+      (window as any).testMerge = (sourceBranch: string) => {
+        handleMergeBranch(sourceBranch);
+      };
+    }
+  }, [commits, branches, handleMergeBranch]);
 
   const handleReset = useCallback(() => {
     // Zresetuj stan do wartości początkowych
@@ -717,11 +702,15 @@ export default function GitExplorerView() {
     let parentCommitIdMaster: string | null = null;
     let currentDepthMaster = 0;
     const masterCommitsIds: string[] = [];
-    for (let i = 0; i < 10; i++) {
+    // Reduce master commits from 10 to 6 to make graph smaller
+    for (let i = 0; i < 6; i++) {
       const newCommit = createCommit(
         parentCommitIdMaster ? [parentCommitIdMaster] : [],
         0, currentDepthMaster
       );
+      if (i === 0) {
+        newCommit.label = "Initial commit";
+      }
       initialCommits[newCommit.id] = newCommit;
       masterCommitsIds.push(newCommit.id);
       parentCommitIdMaster = newCommit.id;
@@ -729,19 +718,19 @@ export default function GitExplorerView() {
     }
     initialBranches[masterBranchName] = { name: masterBranchName, headCommitId: parentCommitIdMaster!, lane: 0 };
 
-    const branch139Name = '139'; // Forks from master commit 8
-    const parentForBranch139 = initialCommits[masterCommitsIds[7]];
-    const branch139HeadId = appendCommitsToBranch(parentForBranch139, 5, 1, initialCommits);
+    const branch139Name = '139'; // Forks from master commit 4 (was 8)
+    const parentForBranch139 = initialCommits[masterCommitsIds[3]]; // commit-3
+    const branch139HeadId = appendCommitsToBranch(parentForBranch139, 3, 1, initialCommits); // 3 commits instead of 5
     initialBranches[branch139Name] = { name: branch139Name, headCommitId: branch139HeadId, lane: 1 };
 
-    const branch136Name = '136'; // Forks from master commit 5
-    const parentForBranch136 = initialCommits[masterCommitsIds[4]];
-    const branch136HeadId = appendCommitsToBranch(parentForBranch136, 4, 2, initialCommits);
+    const branch136Name = '136'; // Forks from master commit 2 (was 5)
+    const parentForBranch136 = initialCommits[masterCommitsIds[1]]; // commit-1
+    const branch136HeadId = appendCommitsToBranch(parentForBranch136, 2, 2, initialCommits); // 2 commits instead of 4
     initialBranches[branch136Name] = { name: branch136Name, headCommitId: branch136HeadId, lane: 2 };
 
-    const branch134Name = '134'; // Forks from master commit 3
-    const parentForBranch134 = initialCommits[masterCommitsIds[2]];
-    const branch134HeadId = appendCommitsToBranch(parentForBranch134, 3, 3, initialCommits);
+    const branch134Name = '134'; // Forks from master commit 1 (was 3)
+    const parentForBranch134 = initialCommits[masterCommitsIds[0]]; // commit-0
+    const branch134HeadId = appendCommitsToBranch(parentForBranch134, 2, 3, initialCommits); // 2 commits instead of 3
     initialBranches[branch134Name] = { name: branch134Name, headCommitId: branch134HeadId, lane: 3 };
 
     const { updatedCommits, updatedBranches } = recalculateAndAssignLanes(initialCommits, initialBranches);
@@ -780,9 +769,9 @@ export default function GitExplorerView() {
           selectedBranchName={selectedBranchName}
           onCommitSelect={handleSelectCommit}
           onBranchSelect={handleSelectBranch}
-          onCommitDrop={handleMoveCommit}
           height={Math.max(graphHeight, 400)}
           width={Math.max(graphWidth, 600)}
+          showCommitLabels={showCommitLabels}
         />
         
         {/* Pływające menu kontrolne */}
@@ -793,12 +782,12 @@ export default function GitExplorerView() {
           branches={branches}
           onAddCommit={handleAddCommit}
           onCreateBranch={handleCreateBranch}
-          onMoveCommit={handleMoveCommit}
           onMergeBranch={handleMergeBranch}
           onAddCustomCommits={handleAddCustomCommits}
-          isMoveModeActive={isMoveModeActive}
-          toggleMoveMode={toggleMoveMode}
           onReset={handleReset}
+          showCommitLabels={showCommitLabels}
+          onToggleShowCommitLabels={toggleShowCommitLabels}
+          onUpdateCommitLabel={handleUpdateCommitLabel}
         />
       </main>
       <footer className="text-center text-sm text-muted-foreground py-2">
