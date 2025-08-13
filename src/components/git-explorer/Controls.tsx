@@ -1,7 +1,7 @@
 "use client";
 
 import { Button } from '@/components/ui/button';
-import { GitCommit, GitBranchPlus, MoveIcon, AlertTriangle, GitMergeIcon, Layers, ChevronUp, ChevronDown, GripVertical } from 'lucide-react';
+import { GitCommit, GitBranchPlus, MoveIcon, AlertTriangle, GitMergeIcon, Layers, ChevronUp, ChevronDown, GripVertical, Trash2 } from 'lucide-react';
 import {
   Select,
   SelectContent,
@@ -15,6 +15,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from '@/components/ui/input';
 
 interface ControlsProps {
+  selectionType: 'branch' | 'commit';
   selectedBranchName: string | null;
   selectedCommitId: string | null;
   commits: Record<string, CommitType>; // Kept for selectedCommitId display if needed
@@ -25,12 +26,14 @@ interface ControlsProps {
   onAddCustomCommits: () => void;
   onReset: () => void;
   onClear: () => void;
-  showCommitLabels: boolean;
-  onToggleShowCommitLabels: () => void;
+  onDelete: () => void;
+  showCommitIds: boolean;
+  onToggleShowCommitIds: () => void;
   onUpdateCommitLabel: (commitId: string, label: string) => void;
 }
 
 export function Controls({
+  selectionType,
   selectedBranchName,
   selectedCommitId,
   commits, // Still needed for selectedCommitId to get its details for display
@@ -41,8 +44,9 @@ export function Controls({
   onAddCustomCommits,
   onReset,
   onClear,
-  showCommitLabels,
-  onToggleShowCommitLabels,
+  onDelete,
+  showCommitIds,
+  onToggleShowCommitIds,
   onUpdateCommitLabel,
 }: ControlsProps) {
 
@@ -52,6 +56,10 @@ export function Controls({
   const [position, setPosition] = useState({ x: 20, y: 20 }); // Tymczasowa pozycja początkowa
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+
+  const isDeleteDisabled = 
+    (selectionType === 'branch' && selectedBranchName === 'master');
+
 
   useEffect(() => {
     if (selectedCommitId && commits[selectedCommitId]) {
@@ -209,34 +217,8 @@ export function Controls({
       
       {isExpanded && (
         <CardContent className="space-y-3 p-3">
+          {/* Global Actions */}
           <div className="flex flex-wrap gap-2">
-            <Button
-              onClick={onAddCommit}
-              disabled={!selectedBranchName}
-              aria-label="Add new commit to selected branch"
-              variant="outline"
-              size="sm"
-            >
-              <GitCommit className="mr-1 h-3.5 w-3.5" /> Add Commit
-            </Button>
-            <Button
-              onClick={onCreateBranch}
-              disabled={!selectedCommitId}
-              aria-label="Create new branch from selected commit"
-              variant="outline"
-              size="sm"
-            >
-              <GitBranchPlus className="mr-1 h-3.5 w-3.5" /> Create Branch
-            </Button>
-            <Button
-              onClick={onAddCustomCommits}
-              disabled={!selectedCommitId}
-              aria-label="Create new branch with 4 custom commits from selected commit"
-              variant="outline"
-              size="sm"
-            >
-              <Layers className="mr-1 h-3.5 w-3.5" /> Apply Customisations
-            </Button>
             <Button
               onClick={onReset}
               variant="secondary"
@@ -254,16 +236,72 @@ export function Controls({
               Clear
             </Button>
             <Button
-                onClick={onToggleShowCommitLabels}
+                onClick={onToggleShowCommitIds}
                 variant="outline"
                 size="sm"
-                aria-label={showCommitLabels ? "Hide commit labels" : "Show commit labels"}
+                aria-label={showCommitIds ? "Hide commit ids" : "Show commit ids"}
             >
-                {showCommitLabels ? "Hide Labels" : "Show Labels"}
+                {showCommitIds ? "Hide Ids" : "Show Ids"}
             </Button>
           </div>
 
-          {selectedCommitId && (
+          {/* Contextual Actions */}
+          <div className="flex flex-wrap gap-2 pt-2 border-t border-border">
+            {selectionType === 'branch' && (
+              <>
+                <Button
+                  onClick={onAddCommit}
+                  disabled={!selectedBranchName}
+                  aria-label="Add new commit to selected branch"
+                  variant="outline"
+                  size="sm"
+                >
+                  <GitCommit className="mr-1 h-3.5 w-3.5" /> Add Commit
+                </Button>
+                <Button
+                  onClick={handleMergeClick}
+                  disabled={!sourceBranchForMerge || !selectedBranchName}
+                  aria-label={`Merge branch ${sourceBranchForMerge || ''} into ${selectedBranchName}`}
+                  size="sm"
+                >
+                  <GitMergeIcon className="mr-1 h-3.5 w-3.5" /> Merge
+                </Button>
+              </>
+            )}
+            {selectionType === 'commit' && (
+              <>
+                <Button
+                  onClick={onCreateBranch}
+                  disabled={!selectedCommitId}
+                  aria-label="Create new branch from selected commit"
+                  variant="outline"
+                  size="sm"
+                >
+                  <GitBranchPlus className="mr-1 h-3.5 w-3.5" /> Create Branch
+                </Button>
+                <Button
+                  onClick={onAddCustomCommits}
+                  disabled={!selectedCommitId}
+                  aria-label="Create new branch with 4 custom commits from selected commit"
+                  variant="outline"
+                  size="sm"
+                >
+                  <Layers className="mr-1 h-3.5 w-3.5" /> Apply Customisations
+                </Button>
+              </>
+            )}
+             <Button
+              onClick={onDelete}
+              variant="destructive"
+              size="sm"
+              disabled={isDeleteDisabled}
+              aria-label="Delete selected branch or commit's branch"
+            >
+              <Trash2 className="mr-1 h-3.5 w-3.5" /> Delete
+            </Button>
+          </div>
+
+          {selectionType === 'commit' && selectedCommitId && (
             <div className="p-3 border rounded-md bg-secondary/50">
               <p className="text-xs font-medium text-secondary-foreground mb-2">
                 Label for commit <span className="font-bold">{selectedCommitId}</span>:
@@ -284,7 +322,7 @@ export function Controls({
             </div>
           )}
 
-          {selectedBranchName && (
+          {selectionType === 'branch' && selectedBranchName && (
             <div className="p-3 border rounded-md bg-secondary/50">
               <p className="text-xs font-medium text-secondary-foreground mb-2">
                 Merge into <span className="font-bold">{selectedBranchName}</span>:
@@ -309,14 +347,6 @@ export function Controls({
                     )}
                   </SelectContent>
                 </Select>
-                <Button
-                  onClick={handleMergeClick}
-                  disabled={!sourceBranchForMerge || !selectedBranchName}
-                  aria-label={`Merge branch ${sourceBranchForMerge || ''} into ${selectedBranchName}`}
-                  size="sm"
-                >
-                  <GitMergeIcon className="mr-1 h-3.5 w-3.5" /> Merge
-                </Button>
               </div>
             </div>
           )}
