@@ -32,17 +32,9 @@ jobs:
       run: npm run build
     
     - name: Run Playwright tests (core layout tests only)
-      run: npx playwright test --project=chromium layout-core.spec.ts
-      env:
-        SKIP_SCREENSHOTS: true
-    
-    - name: Run additional E2E tests
-      run: npx playwright test --project=chromium merge-parents-same-lane.spec.ts
-      env:
-        SKIP_SCREENSHOTS: true
-    
+      run: npx playwright test
+
     - uses: actions/upload-artifact@v4
-      if: failure()
       with:
         name: playwright-report
         path: tests/report/
@@ -50,10 +42,7 @@ jobs:
 
   screenshot-tests:
     timeout-minutes: 60
-    runs-on: ubuntu-latest
-    # Only run screenshot tests on manual trigger or when specifically requested
-    if: github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'screenshot-tests')
-    
+    runs-on: ubuntu-latest    
     steps:
     - uses: actions/checkout@v4
     
@@ -72,7 +61,6 @@ jobs:
       run: npx playwright test --project=screenshot-tests
     
     - uses: actions/upload-artifact@v4
-      if: failure()
       with:
         name: screenshot-test-results
         path: tests/results/
