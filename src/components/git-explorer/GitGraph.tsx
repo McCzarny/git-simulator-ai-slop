@@ -16,7 +16,7 @@ interface GitGraphProps {
   onBranchSelect: (branchName: string) => void;
   height: number;
   width: number;
-  showCommitLabels: boolean;
+  showCommitIds: boolean;
 }
 
 const ARROW_MARKER_ID = "arrow-marker";
@@ -33,7 +33,7 @@ export function GitGraph({
   onBranchSelect,
   height,
   width,
-  showCommitLabels,
+  showCommitIds,
 }: GitGraphProps) {
   if (!positionedCommits.length) {
     return <div className="text-center p-8 text-muted-foreground">No commits to display.</div>;
@@ -124,7 +124,7 @@ export function GitGraph({
               isBranchHead={commitIsBranchHead(commit.id)}
               isCurrentBranchHead={selectedBranchName ? branches[selectedBranchName]?.headCommitId === commit.id : false}
               onSelect={onCommitSelect}
-              showLabel={showCommitLabels}
+              showLabel={showCommitIds}
             />
           ))}
         </g>

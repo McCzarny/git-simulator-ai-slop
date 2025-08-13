@@ -161,57 +161,81 @@ function calculateLayout(
   const positionedCommits: PositionedCommit[] = [];
   const edges: Edge[] = [];
 
-  const commitsMap = { ...commitsInput };
-
-  if (Object.keys(commitsMap).length === 0) {
+  if (Object.keys(commitsInput).length === 0) {
     return { positionedCommits, edges, graphWidth: GRAPH_PADDING * 2, graphHeight: GRAPH_PADDING * 2 };
   }
 
-  const sortedCommits = Object.values(commitsMap).sort((a, b) => {
-    if (a.depth === b.depth) {
-      if(a.timestamp === b.timestamp) return (a.branchLane || 0) - (b.branchLane || 0);
-      return a.timestamp - b.timestamp;
-    }
-    return a.depth - b.depth;
+  // Pass 1: Determine the final lane for each commit to avoid overlaps.
+  const commits = Object.values(commitsInput).sort((a, b) => {
+    if (a.depth !== b.depth) return a.depth - b.depth;
+    if (a.timestamp !== b.timestamp) return a.timestamp - b.timestamp;
+    return (a.branchLane || 0) - (b.branchLane || 0);
   });
+
+  const commitLanes = new Map<string, number>(); // commit.id -> final lane
+  const occupiedSlots = new Map<string, string>(); // "depth,lane" -> commit.id
+
+  const shiftLanes = (fromLane: number) => {
+    const newOccupiedSlots = new Map<string, string>();
+    // Update occupiedSlots by shifting keys
+    for (const [key, commitId] of occupiedSlots.entries()) {
+      const [d, l] = key.split(',').map(Number);
+      if (l >= fromLane) {
+        newOccupiedSlots.set(`${d},${l + 1}`, commitId);
+      } else {
+        newOccupiedSlots.set(key, commitId);
+      }
+    }
+    occupiedSlots.clear();
+    newOccupiedSlots.forEach((value, key) => occupiedSlots.set(key, value));
+
+    // Update final lanes for already-placed commits
+    for (const [commitId, lane] of commitLanes.entries()) {
+      if (lane >= fromLane) {
+        commitLanes.set(commitId, lane + 1);
+      }
+    }
+  };
+
+  for (const commit of commits) {
+    // Get the initial desired lane. It might have been updated by a previous shift operation.
+    let targetLane = commitLanes.get(commit.id) ?? commit.branchLane ?? 0;
+
+    // Find the first available lane for the commit, starting from its targetLane.
+    while (occupiedSlots.has(`${commit.depth},${targetLane}`)) {
+      const nextLane = targetLane + 1;
+      // If the next lane is also occupied, we must shift everything to make space.
+      if (occupiedSlots.has(`${commit.depth},${nextLane}`)) {
+        shiftLanes(nextLane);
+        // After the shift, the commit's own target lane might have changed, so we re-read it.
+        targetLane = commitLanes.get(commit.id) ?? commit.branchLane ?? 0;
+      } else {
+        // If the next lane is free, we can just use that one.
+        targetLane = nextLane;
+      }
+    }
+
+    // Finalize the lane for this commit and mark the slot as occupied.
+    commitLanes.set(commit.id, targetLane);
+    occupiedSlots.set(`${commit.depth},${targetLane}`, commit.id);
+  }
 
   let maxX = 0;
   let maxY = 0;
   const tempPositionedCommitsMap: Record<string, PositionedCommit> = {};
-  const usedPositions = new Set<string>(); // Track used positions to avoid collisions
 
-  for (const commitData of sortedCommits) {
-    let xPos = (commitData.branchLane || 0) * X_SPACING + GRAPH_PADDING;
-    let yPos = commitData.depth * Y_SPACING + GRAPH_PADDING;
-
-    // Check for collision and resolve by adjusting position
-    let positionKey = `${xPos},${yPos}`;
-    let offsetX = 0;
-    let offsetY = 0;
-
-    // If position is already used, find an alternative
-    while (usedPositions.has(positionKey)) {
-      // First try to offset horizontally (slight right shift)
-      if (offsetX < X_SPACING * 0.7) {
-        offsetX += 20; // Small horizontal offset
-        xPos = (commitData.branchLane || 0) * X_SPACING + GRAPH_PADDING + offsetX;
-      } else {
-        // If horizontal offset is too large, try vertical offset
-        offsetY += 15; // Small vertical offset
-        offsetX = 0; // Reset horizontal offset
-        xPos = (commitData.branchLane || 0) * X_SPACING + GRAPH_PADDING;
-        yPos = commitData.depth * Y_SPACING + GRAPH_PADDING + offsetY;
-      }
-      positionKey = `${xPos},${yPos}`;
-    }
-
-    // Mark this position as used
-    usedPositions.add(positionKey);
+  // Pass 2: Calculate final X, Y positions based on the determined lanes.
+  // Iterate over the *sorted* commits array to maintain a consistent order.
+  for (const commitData of commits) {
+    const finalLane = commitLanes.get(commitData.id) || 0;
+    const xPos = finalLane * X_SPACING + GRAPH_PADDING;
+    const yPos = commitData.depth * Y_SPACING + GRAPH_PADDING;
 
     const positionedCommit: PositionedCommit = {
       ...commitData,
       x: xPos,
-      y: yPos
+      y: yPos,
+      branchLane: finalLane, // Store the final calculated lane
     };
     positionedCommits.push(positionedCommit);
     tempPositionedCommitsMap[commitData.id] = positionedCommit;
@@ -245,13 +269,14 @@ export default function GitExplorerView() {
   const [branches, setBranches] = useState<Record<string, BranchType>>({});
   const [selectedCommitId, setSelectedCommitId] = useState<string | null>(null);
   const [selectedBranchName, setSelectedBranchName] = useState<string | null>(INITIAL_BRANCH_NAME);
+  const [selectionType, setSelectionType] = useState<'branch' | 'commit'>('branch');
 
   const [nextCommitIdx, setNextCommitIdx] = useState(0);
   const [nextBranchNumber, setNextBranchNumber] = useState(132); // Start from a base
   const [nextCustomSuffix, setNextCustomSuffix] = useState(1);
   const [nextSharedTimestamp, setNextSharedTimestamp] = useState(Date.now());
 
-  const [showCommitLabels, setShowCommitLabels] = useState(false);
+  const [showCommitIds, setShowCommitIds] = useState(false);
 
   const generateInitialGraphState = useCallback(() => {
     let initialCommits: Record<string, CommitType> = {};
@@ -344,6 +369,7 @@ export default function GitExplorerView() {
       setSelectedCommitId(updatedBranches[masterBranchName].headCommitId);
     }
     setSelectedBranchName(masterBranchName);
+    setSelectionType('branch');
     setNextCommitIdx(commitCounter);
 
     const numericBranchNames = Object.keys(updatedBranches)
@@ -356,8 +382,8 @@ export default function GitExplorerView() {
     setNextBranchNumber(Math.max(132, maxBranchNum + 1));
   }, []);
 
-  const toggleShowCommitLabels = useCallback(() => {
-    setShowCommitLabels(prev => !prev);
+  const toggleShowCommitIds = useCallback(() => {
+    setShowCommitIds(prev => !prev);
   }, []);
 
   const handleUpdateCommitLabel = useCallback((commitId: string, label: string) => {
@@ -434,6 +460,7 @@ export default function GitExplorerView() {
     setBranches(updatedBranches);
 
     setSelectedCommitId(newCommitId);
+    setSelectionType('branch');
     setNextCommitIdx(prev => prev + 1);
     toast({ title: "Commit Added", description: `Commit ${newCommitId} added to branch ${currentBranch.name}.` });
   }, [selectedBranchName, branches, commits, nextCommitIdx, toast, getNewTimestamp]);
@@ -474,6 +501,7 @@ export default function GitExplorerView() {
 
     setSelectedBranchName(result.newBranchName);
     setSelectedCommitId(result.newCommitId);
+    setSelectionType('branch');
     setNextCommitIdx(prev => prev + 1);
     setNextBranchNumber(prev => prev + 1);
     toast({ title: "Branch Created", description: `Branch ${result.newBranchName} created with initial commit ${result.newCommitId}. Layout updated.` });
@@ -526,17 +554,77 @@ export default function GitExplorerView() {
 
     setSelectedBranchName(result.newBranchName);
     setSelectedCommitId(result.headOfCustomCommits);
+    setSelectionType('branch');
     setNextCommitIdx(result.updatedNextCommitIdx);
     setNextCustomSuffix(prev => prev + 1); 
     toast({ title: "Customisations Applied", description: `Branch ${result.newBranchName} created with 4 custom commits. Layout updated.` });
   }, [selectedCommitId, commits, branches, nextCommitIdx, nextCustomSuffix, toast, performGitActionAndUpdateLayout, getNewTimestamp]);
 
 
+  const handleDelete = useCallback(() => {
+    if (selectionType === 'branch' && selectedBranchName) {
+      if (selectedBranchName === INITIAL_BRANCH_NAME) {
+        toast({ title: "Error", description: "Cannot delete the master branch.", variant: "destructive" });
+        return;
+      }
+      const branchToDelete = branches[selectedBranchName];
+      if (!branchToDelete) return;
+
+      performGitActionAndUpdateLayout((draftCommits, draftBranches) => {
+        // This is a simple deletion. For a real git scenario, you'd need to handle
+        // commits that are only on this branch. Here we just remove the branch ref.
+        delete draftBranches[selectedBranchName];
+      }, commits, branches);
+
+      toast({ title: "Branch Deleted", description: `Branch ${selectedBranchName} has been deleted.` });
+      setSelectedBranchName(INITIAL_BRANCH_NAME);
+      setSelectionType('branch');
+      setSelectedCommitId(branches[INITIAL_BRANCH_NAME]?.headCommitId || null);
+
+    } else if (selectionType === 'commit' && selectedCommitId) {
+      const commitToDelete = commits[selectedCommitId];
+      if (!commitToDelete) return;
+
+      // If commit does not have a parent, show error
+      if (!commitToDelete.parentIds || commitToDelete.parentIds.length === 0) {
+        toast({ title: "Error", description: "Cannot delete a commit without a parent.", variant: "destructive" });
+        return;
+      }
+
+      // Check if any branch points to this commit
+      const branchName = Object.values(branches).find(b => b.headCommitId === selectedCommitId)?.name;
+      
+      if (branchName) {
+         performGitActionAndUpdateLayout((draftCommits, draftBranches) => {
+            delete draftBranches[branchName];
+         }, commits, branches);
+         toast({ title: "Branch Deleted", description: `Deleted branch ${branchName} containing the selected commit.` });
+         setSelectedBranchName(INITIAL_BRANCH_NAME);
+         setSelectionType('branch');
+         setSelectedCommitId(branches[INITIAL_BRANCH_NAME]?.headCommitId || null);
+      }
+
+      // Remove commit from the graph and move focus on the first parent
+      const firstParentId = commitToDelete.parentIds[0];
+      if (firstParentId) {
+        performGitActionAndUpdateLayout((draftCommits, draftBranches) => {
+          delete draftCommits[selectedCommitId];
+        }, commits, branches);
+        setSelectedCommitId(firstParentId);
+        setSelectionType('commit');
+        toast({ title: "Commit Deleted", description: `Commit ${selectedCommitId} has been deleted.` });
+      }
+    }
+  }, [selectionType, selectedBranchName, selectedCommitId, commits, branches, toast, performGitActionAndUpdateLayout]);
+
   const handleSelectCommit = useCallback((commitId: string) => {
+    setSelectionType('commit');
     setSelectedCommitId(commitId);
+    setSelectedBranchName(null);
   }, []);
 
   const handleSelectBranch = useCallback((branchName: string) => {
+    setSelectionType('branch');
     setSelectedBranchName(branchName);
     if (branches[branchName]) {
       setSelectedCommitId(branches[branchName].headCommitId);
@@ -596,6 +684,7 @@ export default function GitExplorerView() {
               return { fastForward: true, newHeadId: sourceHeadCommit.id };
             }, commits, branches);
             setSelectedCommitId(sourceHeadCommit.id);
+            setSelectionType('branch');
             toast({ title: "Fast-Forward Merge", description: `${selectedBranchName} fast-forwarded to ${sourceBranchNameToMerge}.` });
             return;
         }
@@ -621,6 +710,7 @@ export default function GitExplorerView() {
     setBranches(updatedBranches);
 
     setSelectedCommitId(newCommitId);
+    setSelectionType('branch');
     setNextCommitIdx(prev => prev + 1);
     toast({ title: "Merge Successful", description: `Merge commit ${newCommitId} created. Layout updated.` });
   }, [selectedBranchName, branches, commits, nextCommitIdx, toast, performGitActionAndUpdateLayout, getNewTimestamp]);
@@ -659,6 +749,7 @@ export default function GitExplorerView() {
       setBranches({ [INITIAL_BRANCH_NAME]: { name: INITIAL_BRANCH_NAME, headCommitId: initialCommit.id, lane: 0 } });
       setSelectedCommitId(initialCommit.id);
       setSelectedBranchName(INITIAL_BRANCH_NAME);
+      setSelectionType('branch');
       setNextCommitIdx(1);
       setNextBranchNumber(132);
       setNextCustomSuffix(1);
@@ -690,11 +781,12 @@ export default function GitExplorerView() {
           onBranchSelect={handleSelectBranch}
           height={Math.max(graphHeight, 400)}
           width={Math.max(graphWidth, 600)}
-          showCommitLabels={showCommitLabels}
+          showCommitIds={showCommitIds}
         />
         
         {/* Pływające menu kontrolne */}
         <Controls
+          selectionType={selectionType}
           selectedBranchName={selectedBranchName}
           selectedCommitId={selectedCommitId}
           commits={commits}
@@ -705,8 +797,9 @@ export default function GitExplorerView() {
           onAddCustomCommits={handleAddCustomCommits}
           onReset={handleReset}
           onClear={handleClear}
-          showCommitLabels={showCommitLabels}
-          onToggleShowCommitLabels={toggleShowCommitLabels}
+          onDelete={handleDelete}
+          showCommitIds={showCommitIds}
+          onToggleShowCommitIds={toggleShowCommitIds}
           onUpdateCommitLabel={handleUpdateCommitLabel}
         />
       </main>
