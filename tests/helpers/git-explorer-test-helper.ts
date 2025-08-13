@@ -153,7 +153,7 @@ export const TEST_SCENARIOS: TestScenario[] = [
     expectedCollisions: false,
     steps: [
       { action: 'wait', duration: 2000 },
-      { action: 'screenshot', filename: 'initial-state.png' },
+      { action: 'screenshot', filename: 'initial-state-check.png' },
     ]
   },
   {
