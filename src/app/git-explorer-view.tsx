@@ -157,75 +157,65 @@ function recalculateAndAssignLanes(
 function calculateLayout(
   commitsInput: Readonly<Record<string, CommitType>>,
   _branchesInput: Readonly<Record<string, BranchType>>
-): { positionedCommits: PositionedCommit[]; edges: Edge[]; graphWidth: number; graphHeight: number } {
+): { positionedCommits: PositionedCommit[]; edges: Edge[]; graphWidth: number; graphHeight: number; updatedCommits?: Record<string, CommitType> } {
   const positionedCommits: PositionedCommit[] = [];
   const edges: Edge[] = [];
+  let updatedCommits: Record<string, CommitType> | undefined = undefined;
 
   if (Object.keys(commitsInput).length === 0) {
     return { positionedCommits, edges, graphWidth: GRAPH_PADDING * 2, graphHeight: GRAPH_PADDING * 2 };
   }
 
-  // Pass 1: Determine the final lane for each commit to avoid overlaps.
+  // Sort commits by depth (BFS order), then by timestamp for deterministic ordering
   const commits = Object.values(commitsInput).sort((a, b) => {
     if (a.depth !== b.depth) return a.depth - b.depth;
     if (a.timestamp !== b.timestamp) return a.timestamp - b.timestamp;
-    return (a.branchLane || 0) - (b.branchLane || 0);
+    return a.id.localeCompare(b.id); // Consistent ordering for same timestamp
   });
 
   const commitLanes = new Map<string, number>(); // commit.id -> final lane
   const occupiedSlots = new Map<string, string>(); // "depth,lane" -> commit.id
 
-  const shiftLanes = (fromLane: number) => {
-    const newOccupiedSlots = new Map<string, string>();
-    // Update occupiedSlots by shifting keys
-    for (const [key, commitId] of occupiedSlots.entries()) {
-      const [d, l] = key.split(',').map(Number);
-      if (l >= fromLane) {
-        newOccupiedSlots.set(`${d},${l + 1}`, commitId);
-      } else {
-        newOccupiedSlots.set(key, commitId);
-      }
-    }
-    occupiedSlots.clear();
-    newOccupiedSlots.forEach((value, key) => occupiedSlots.set(key, value));
-
-    // Update final lanes for already-placed commits
-    for (const [commitId, lane] of commitLanes.entries()) {
-      if (lane >= fromLane) {
-        commitLanes.set(commitId, lane + 1);
-      }
-    }
-  };
-
+  // Process commits in BFS order (by depth)
   for (const commit of commits) {
-    // Get the initial desired lane. It might have been updated by a previous shift operation.
-    let targetLane = commitLanes.get(commit.id) ?? commit.branchLane ?? 0;
-
-    // Find the first available lane for the commit, starting from its targetLane.
-    while (occupiedSlots.has(`${commit.depth},${targetLane}`)) {
-      const nextLane = targetLane + 1;
-      // If the next lane is also occupied, we must shift everything to make space.
-      if (occupiedSlots.has(`${commit.depth},${nextLane}`)) {
-        shiftLanes(nextLane);
-        // After the shift, the commit's own target lane might have changed, so we re-read it.
-        targetLane = commitLanes.get(commit.id) ?? commit.branchLane ?? 0;
-      } else {
-        // If the next lane is free, we can just use that one.
-        targetLane = nextLane;
+    let targetLane = 0;
+    
+    // Try to inherit lane from first parent
+    if (commit.parentIds.length > 0) {
+      const firstParentId = commit.parentIds[0];
+      const firstParentLane = commitLanes.get(firstParentId);
+      
+      if (firstParentLane !== undefined) {
+        targetLane = firstParentLane;
       }
     }
-
-    // Finalize the lane for this commit and mark the slot as occupied.
+    
+    // If the inherited lane is occupied at this depth, find the next available lane
+    while (occupiedSlots.has(`${commit.depth},${targetLane}`)) {
+      targetLane++;
+    }
+    
+    // Assign the commit to the found lane
     commitLanes.set(commit.id, targetLane);
     occupiedSlots.set(`${commit.depth},${targetLane}`, commit.id);
+    
+    // Track if we need to update the commit's branchLane
+    if (targetLane !== (commit.branchLane ?? 0)) {
+      if (!updatedCommits) {
+        updatedCommits = { ...commitsInput };
+      }
+      updatedCommits[commit.id] = {
+        ...commit,
+        branchLane: targetLane
+      };
+    }
   }
 
   let maxX = 0;
   let maxY = 0;
   const tempPositionedCommitsMap: Record<string, PositionedCommit> = {};
 
-  // Pass 2: Calculate final X, Y positions based on the determined lanes.
-  // Iterate over the *sorted* commits array to maintain a consistent order.
+  // Calculate final X, Y positions based on the determined lanes
   for (const commitData of commits) {
     const finalLane = commitLanes.get(commitData.id) || 0;
     const xPos = finalLane * X_SPACING + GRAPH_PADDING;
@@ -260,6 +250,7 @@ function calculateLayout(
     edges,
     graphWidth: maxX + X_SPACING,
     graphHeight: maxY + Y_SPACING,
+    updatedCommits,
   };
 }
 
@@ -760,7 +751,18 @@ export default function GitExplorerView() {
   }, [commits, toast]);
 
   const { positionedCommits, edges, graphWidth, graphHeight } = useMemo(() => {
-    return calculateLayout(commits, branches);
+    const layoutResult = calculateLayout(commits, branches);
+    
+    // If the layout algorithm had to update commit properties (e.g., lane reassignments),
+    // apply those updates to the commits state
+    if (layoutResult.updatedCommits) {
+      // We need to update the state outside of useMemo, so we schedule it
+      setTimeout(() => {
+        setCommits(layoutResult.updatedCommits!);
+      }, 0);
+    }
+    
+    return layoutResult;
   }, [commits, branches]);
 
   return (
