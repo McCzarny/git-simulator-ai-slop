@@ -24,6 +24,7 @@ interface ControlsProps {
   onMergeBranch: (sourceBranchName: string) => void;
   onAddCustomCommits: () => void;
   onReset: () => void;
+  onClear: () => void;
   showCommitLabels: boolean;
   onToggleShowCommitLabels: () => void;
   onUpdateCommitLabel: (commitId: string, label: string) => void;
@@ -39,6 +40,7 @@ export function Controls({
   onMergeBranch,
   onAddCustomCommits,
   onReset,
+  onClear,
   showCommitLabels,
   onToggleShowCommitLabels,
   onUpdateCommitLabel,
@@ -242,6 +244,14 @@ export function Controls({
               size="sm"
             >
               Reset
+            </Button>
+            <Button
+              onClick={onClear}
+              variant="destructive"
+              aria-label="Clear graph"
+              size="sm"
+            >
+              Clear
             </Button>
             <Button
                 onClick={onToggleShowCommitLabels}

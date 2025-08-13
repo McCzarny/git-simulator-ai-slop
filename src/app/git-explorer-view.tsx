@@ -253,41 +253,19 @@ export default function GitExplorerView() {
 
   const [showCommitLabels, setShowCommitLabels] = useState(false);
 
-  const toggleShowCommitLabels = useCallback(() => {
-    setShowCommitLabels(prev => !prev);
-  }, []);
-
-  const handleUpdateCommitLabel = useCallback((commitId: string, label: string) => {
-    setCommits(prevCommits => {
-      const newCommits = { ...prevCommits };
-      if (newCommits[commitId]) {
-        newCommits[commitId] = { ...newCommits[commitId], label };
-      }
-      return newCommits;
-    });
-  }, []);
-
-  const getNewTimestamp = useCallback(() => {
-    const ts = nextSharedTimestamp;
-    setNextSharedTimestamp(prev => prev + 1); // Ensure strictly increasing timestamps
-    return ts;
-  }, [nextSharedTimestamp]);
-
-
-  useEffect(() => {
+  const generateInitialGraphState = useCallback(() => {
     let initialCommits: Record<string, CommitType> = {};
     let initialBranches: Record<string, BranchType> = {};
     let commitCounter = 0;
 
-    // Initialize timestamp state for the session
     const initialTimestampForSession = Date.now();
-    setNextSharedTimestamp(initialTimestampForSession + 1000); // Start shared timestamp ahead
+    setNextSharedTimestamp(initialTimestampForSession + 1000);
 
-    let currentLocalTimestamp = initialTimestampForSession; // For initial setup only
+    let currentLocalTimestamp = initialTimestampForSession;
     const getInitialTimestamp = () => {
-        currentLocalTimestamp++;
-        return currentLocalTimestamp;
-    }
+      currentLocalTimestamp++;
+      return currentLocalTimestamp;
+    };
 
     const createCommit = (
       parentIds: string[],
@@ -343,22 +321,20 @@ export default function GitExplorerView() {
     }
     initialBranches[masterBranchName] = { name: masterBranchName, headCommitId: parentCommitIdMaster!, lane: 0 };
 
-
-    const branch139Name = '139'; // Forks latest (from master commit 8)
-    const parentForBranch139 = initialCommits[masterCommitsIds[7]]; // masterCommitsIds is 0-indexed
+    const branch139Name = '139';
+    const parentForBranch139 = initialCommits[masterCommitsIds[7]];
     const branch139HeadId = appendCommitsToBranch(parentForBranch139, 5, 1, initialCommits);
     initialBranches[branch139Name] = { name: branch139Name, headCommitId: branch139HeadId, lane: 1 };
 
-    const branch136Name = '136'; // Middle fork (from master commit 5)
+    const branch136Name = '136';
     const parentForBranch136 = initialCommits[masterCommitsIds[4]];
     const branch136HeadId = appendCommitsToBranch(parentForBranch136, 4, 2, initialCommits);
     initialBranches[branch136Name] = { name: branch136Name, headCommitId: branch136HeadId, lane: 2 };
 
-    const branch134Name = '134'; // Forks earliest (from master commit 3)
+    const branch134Name = '134';
     const parentForBranch134 = initialCommits[masterCommitsIds[2]];
     const branch134HeadId = appendCommitsToBranch(parentForBranch134, 3, 3, initialCommits);
     initialBranches[branch134Name] = { name: branch134Name, headCommitId: branch134HeadId, lane: 3 };
-
 
     const { updatedCommits, updatedBranches } = recalculateAndAssignLanes(initialCommits, initialBranches);
     setCommits(updatedCommits);
@@ -372,14 +348,37 @@ export default function GitExplorerView() {
 
     const numericBranchNames = Object.keys(updatedBranches)
       .map(name => {
-        const parts = name.split('-'); // Handles "custom-X" vs "X"
+        const parts = name.split('-');
         return parseInt(parts[0], 10);
       })
       .filter(num => !isNaN(num));
-    const maxBranchNum = numericBranchNames.length > 0 ? Math.max(...numericBranchNames) : (132 -1) ; // Ensure at least 132
+    const maxBranchNum = numericBranchNames.length > 0 ? Math.max(...numericBranchNames) : (132 - 1);
     setNextBranchNumber(Math.max(132, maxBranchNum + 1));
-    // nextCustomSuffix starts at 1, no need to parse from initial branches unless they were also "custom-X"
+  }, []);
 
+  const toggleShowCommitLabels = useCallback(() => {
+    setShowCommitLabels(prev => !prev);
+  }, []);
+
+  const handleUpdateCommitLabel = useCallback((commitId: string, label: string) => {
+    setCommits(prevCommits => {
+      const newCommits = { ...prevCommits };
+      if (newCommits[commitId]) {
+        newCommits[commitId] = { ...newCommits[commitId], label };
+      }
+      return newCommits;
+    });
+  }, []);
+
+  const getNewTimestamp = useCallback(() => {
+    const ts = nextSharedTimestamp;
+    setNextSharedTimestamp(prev => prev + 1); // Ensure strictly increasing timestamps
+    return ts;
+  }, [nextSharedTimestamp]);
+
+
+  useEffect(() => {
+    generateInitialGraphState();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -648,106 +647,26 @@ export default function GitExplorerView() {
   }, [commits, branches, handleMergeBranch]);
 
   const handleReset = useCallback(() => {
-    // Zresetuj stan do wartości początkowych
-    let initialCommits: Record<string, CommitType> = {};
-    let initialBranches: Record<string, BranchType> = {};
-    let commitCounter = 0;
-
-    // Zainicjuj timestamp dla sesji
-    const initialTimestampForSession = Date.now();
-    setNextSharedTimestamp(initialTimestampForSession + 1000); // Rozpocznij wspólny timestamp z wyprzedzeniem
-
-    let currentLocalTimestamp = initialTimestampForSession; // Tylko dla wstępnej konfiguracji
-    const getInitialTimestamp = () => {
-        currentLocalTimestamp++;
-        return currentLocalTimestamp;
-    }
-
-    const createCommit = (
-      parentIds: string[],
-      initialBranchLaneGuess: number,
-      depth: number,
-      isCustom: boolean = false
-    ): CommitType => {
-      const id = `commit-${commitCounter++}`;
-      return { id, parentIds, timestamp: getInitialTimestamp(), branchLane: initialBranchLaneGuess, depth, isCustom };
-    };
-
-    const appendCommitsToBranch = (
-      startingParentCommit: CommitType,
-      numberOfCommits: number,
-      initialLaneGuess: number,
-      targetCommitsMap: Record<string, CommitType>,
-      isBranchCustom: boolean = false
-    ): string => {
-      let currentParentIdInSequence = startingParentCommit.id;
-      let currentDepthInSequence = startingParentCommit.depth + 1;
-      let headOfThisSequence = '';
-      for (let i = 0; i < numberOfCommits; i++) {
-        const newCommit = createCommit(
-          [currentParentIdInSequence],
-          initialLaneGuess,
-          currentDepthInSequence,
-          isBranchCustom
-        );
-        targetCommitsMap[newCommit.id] = newCommit;
-        currentParentIdInSequence = newCommit.id;
-        headOfThisSequence = newCommit.id;
-        currentDepthInSequence++;
-      }
-      return headOfThisSequence;
-    };
-
-    const masterBranchName = INITIAL_BRANCH_NAME;
-    let parentCommitIdMaster: string | null = null;
-    let currentDepthMaster = 0;
-    const masterCommitsIds: string[] = [];
-    // Reduce master commits from 10 to 6 to make graph smaller
-    for (let i = 0; i < 6; i++) {
-      const newCommit = createCommit(
-        parentCommitIdMaster ? [parentCommitIdMaster] : [],
-        0, currentDepthMaster
-      );
-      if (i === 0) {
-        newCommit.label = "Initial commit";
-      }
-      initialCommits[newCommit.id] = newCommit;
-      masterCommitsIds.push(newCommit.id);
-      parentCommitIdMaster = newCommit.id;
-      currentDepthMaster++;
-    }
-    initialBranches[masterBranchName] = { name: masterBranchName, headCommitId: parentCommitIdMaster!, lane: 0 };
-
-    const branch139Name = '139'; // Forks from master commit 4 (was 8)
-    const parentForBranch139 = initialCommits[masterCommitsIds[3]]; // commit-3
-    const branch139HeadId = appendCommitsToBranch(parentForBranch139, 3, 1, initialCommits); // 3 commits instead of 5
-    initialBranches[branch139Name] = { name: branch139Name, headCommitId: branch139HeadId, lane: 1 };
-
-    const branch136Name = '136'; // Forks from master commit 2 (was 5)
-    const parentForBranch136 = initialCommits[masterCommitsIds[1]]; // commit-1
-    const branch136HeadId = appendCommitsToBranch(parentForBranch136, 2, 2, initialCommits); // 2 commits instead of 4
-    initialBranches[branch136Name] = { name: branch136Name, headCommitId: branch136HeadId, lane: 2 };
-
-    const branch134Name = '134'; // Forks from master commit 1 (was 3)
-    const parentForBranch134 = initialCommits[masterCommitsIds[0]]; // commit-0
-    const branch134HeadId = appendCommitsToBranch(parentForBranch134, 2, 3, initialCommits); // 2 commits instead of 3
-    initialBranches[branch134Name] = { name: branch134Name, headCommitId: branch134HeadId, lane: 3 };
-
-    const { updatedCommits, updatedBranches } = recalculateAndAssignLanes(initialCommits, initialBranches);
-    setCommits(updatedCommits);
-    setBranches(updatedBranches);
-
-    if (updatedBranches[masterBranchName]) {
-      setSelectedCommitId(updatedBranches[masterBranchName].headCommitId);
-    }
-    setSelectedBranchName(masterBranchName);
-    setNextCommitIdx(commitCounter);
-
-    setNextBranchNumber(132); // Początkowa wartość numeracji gałęzi
-    setNextCustomSuffix(1);   // Reset licznika niestandardowych gałęzi
-    
+    generateInitialGraphState();
     toast({ title: "Reset Completed", description: "Git repository has been reset to initial state." });
-  }, [setCommits, setBranches, setSelectedCommitId, setSelectedBranchName, setNextCommitIdx, setNextBranchNumber, setNextCustomSuffix, setNextSharedTimestamp, toast]);
+  }, [generateInitialGraphState, toast]);
+
+  const handleClear = useCallback(() => {
+    const initialCommit = Object.values(commits).find(c => c.parentIds.length === 0);
+    if (initialCommit) {
+      const clearedCommit = { ...initialCommit, label: "Initial commit" };
+      setCommits({ [initialCommit.id]: clearedCommit });
+      setBranches({ [INITIAL_BRANCH_NAME]: { name: INITIAL_BRANCH_NAME, headCommitId: initialCommit.id, lane: 0 } });
+      setSelectedCommitId(initialCommit.id);
+      setSelectedBranchName(INITIAL_BRANCH_NAME);
+      setNextCommitIdx(1);
+      setNextBranchNumber(132);
+      setNextCustomSuffix(1);
+      toast({ title: "Graph Cleared", description: "The graph has been cleared, leaving only the initial commit." });
+    } else {
+      toast({ title: "Error", description: "Could not find the initial commit to clear the graph.", variant: "destructive" });
+    }
+  }, [commits, toast]);
 
   const { positionedCommits, edges, graphWidth, graphHeight } = useMemo(() => {
     return calculateLayout(commits, branches);
@@ -785,6 +704,7 @@ export default function GitExplorerView() {
           onMergeBranch={handleMergeBranch}
           onAddCustomCommits={handleAddCustomCommits}
           onReset={handleReset}
+          onClear={handleClear}
           showCommitLabels={showCommitLabels}
           onToggleShowCommitLabels={toggleShowCommitLabels}
           onUpdateCommitLabel={handleUpdateCommitLabel}
