@@ -166,18 +166,100 @@ function calculateLayout(
     return { positionedCommits, edges, graphWidth: GRAPH_PADDING * 2, graphHeight: GRAPH_PADDING * 2 };
   }
 
-  // Sort commits by depth (BFS order), then by timestamp for deterministic ordering
-  const commits = Object.values(commitsInput).sort((a, b) => {
-    if (a.depth !== b.depth) return a.depth - b.depth;
-    if (a.timestamp !== b.timestamp) return a.timestamp - b.timestamp;
-    return a.id.localeCompare(b.id); // Consistent ordering for same timestamp
-  });
-
   const commitLanes = new Map<string, number>(); // commit.id -> final lane
   const occupiedSlots = new Map<string, string>(); // "depth,lane" -> commit.id
+  const visited = new Set<string>();
 
-  // Process commits in BFS order (by depth)
-  for (const commit of commits) {
+  // Find the initial commit (the one with no parents)
+  const allCommits = Object.values(commitsInput);
+  const initialCommit = allCommits.find(commit => commit.parentIds.length === 0);
+  
+  if (!initialCommit) {
+    console.error('No initial commit found');
+    return { positionedCommits, edges, graphWidth: GRAPH_PADDING * 2, graphHeight: GRAPH_PADDING * 2 };
+  }
+
+  // Build parent-to-children mapping for traversal
+  const childrenMap = new Map<string, string[]>();
+  for (const commit of allCommits) {
+    for (const parentId of commit.parentIds) {
+      if (!childrenMap.has(parentId)) {
+        childrenMap.set(parentId, []);
+      }
+      childrenMap.get(parentId)!.push(commit.id);
+    }
+  }
+
+  // Process commits starting from initial commit and following parent-child relationships
+  const queue: string[] = [initialCommit.id];
+  
+  while (queue.length > 0) {
+    const commitId = queue.shift()!;
+    if (visited.has(commitId)) continue;
+    
+    const commit = commitsInput[commitId];
+    if (!commit) continue;
+    
+    visited.add(commitId);
+    
+    let targetLane = 0;
+    
+    // Try to inherit lane from first parent
+    if (commit.parentIds.length > 0) {
+      const firstParentId = commit.parentIds[0];
+      const firstParentLane = commitLanes.get(firstParentId);
+      
+      if (firstParentLane !== undefined) {
+        targetLane = firstParentLane;
+      }
+    }
+    
+    // If the inherited lane is occupied at this depth, find the next available lane
+    while (occupiedSlots.has(`${commit.depth},${targetLane}`)) {
+      targetLane++;
+    }
+    
+    // Assign the commit to the found lane
+    commitLanes.set(commitId, targetLane);
+    occupiedSlots.set(`${commit.depth},${targetLane}`, commitId);
+    
+    // Track if we need to update the commit's branchLane
+    if (targetLane !== (commit.branchLane ?? 0)) {
+      if (!updatedCommits) {
+        updatedCommits = { ...commitsInput };
+      }
+      updatedCommits[commitId] = {
+        ...commit,
+        branchLane: targetLane
+      };
+    }
+    
+    // Add children to queue for processing, sorted by timestamp for deterministic order
+    const children = childrenMap.get(commitId) || [];
+    const sortedChildren = children
+      .map(childId => commitsInput[childId])
+      .filter(child => child && !visited.has(child.id))
+      .sort((a, b) => {
+        // Sort by depth first, then timestamp
+        if (a.depth !== b.depth) return a.depth - b.depth;
+        if (a.timestamp !== b.timestamp) return a.timestamp - b.timestamp;
+        return a.id.localeCompare(b.id);
+      })
+      .map(child => child.id);
+    
+    queue.push(...sortedChildren);
+  }
+
+  // Process any remaining unvisited commits (in case of disconnected components)
+  const unvisitedCommits = allCommits
+    .filter(commit => !visited.has(commit.id))
+    .sort((a, b) => {
+      if (a.depth !== b.depth) return a.depth - b.depth;
+      if (a.timestamp !== b.timestamp) return a.timestamp - b.timestamp;
+      return a.id.localeCompare(b.id);
+    });
+
+  for (const commit of unvisitedCommits) {
     let targetLane = 0;
     
     // Try to inherit lane from first parent
@@ -216,7 +298,7 @@ function calculateLayout(
   const tempPositionedCommitsMap: Record<string, PositionedCommit> = {};
 
   // Calculate final X, Y positions based on the determined lanes
-  for (const commitData of commits) {
+  for (const commitData of allCommits) {
     const finalLane = commitLanes.get(commitData.id) || 0;
     const xPos = finalLane * X_SPACING + GRAPH_PADDING;
     const yPos = commitData.depth * Y_SPACING + GRAPH_PADDING;
