@@ -13,6 +13,7 @@
     "test": "vitest",
     "test:ui": "vitest --ui",
     "test:e2e": "playwright test",
+    "test:e2e:core": "playwright test --project=chromium layout-core.spec.ts merge-parents-same-lane.spec.ts",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:headed": "playwright test --headed",
     "test:screenshot": "playwright test --project=screenshot-tests"

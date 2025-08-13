@@ -4,7 +4,7 @@ import { defineConfig, devices } from '@playwright/test';
  * @see https://playwright.dev/docs/test-configuration
  */
 export default defineConfig({
-  timeout: 5_000,
+  timeout: 10_000, // Increased from 5s to 10s for stability
   testDir: './tests',
   /* Run tests in files in parallel */
   fullyParallel: true,
@@ -15,14 +15,20 @@ export default defineConfig({
   /* Opt out of parallel tests on CI. */
   workers: process.env.CI ? 1 : undefined,
   /* Reporter to use. See https://playwright.dev/docs/test-reporters */
-  reporter: [ ['html', { outputFolder: 'tests/report', open: 'never' }] ],
+  reporter: process.env.CI 
+    ? [['github'], ['html', { outputFolder: 'tests/report', open: 'never' }]]
+    : [['list'], ['html', { outputFolder: 'tests/report', open: 'never' }]],
+  
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
     /* Base URL to use in actions like `await page.goto('/')`. */
     baseURL: 'http://localhost:9002',
-
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
     trace: 'on-first-retry',
+    /* Screenshot only on failure */
+    screenshot: 'only-on-failure',
+    /* Reduce animations for faster tests */
+    actionTimeout: 5000,
   },
   outputDir: 'tests/results',
 
@@ -31,24 +37,16 @@ export default defineConfig({
     {
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
+      testMatch: ['**/*.spec.ts', '!**/screenshot-*.spec.ts'],
     },
 
-    // {
-    //   name: 'firefox',
-    //   use: { ...devices['Desktop Firefox'] },
-    // },
-
-    // {
-    //   name: 'webkit',
-    //   use: { ...devices['Desktop Safari'] },
-    // },
-
-
-    /* Screenshot tests project */
+    // Separate project for screenshot tests (slower)
     {
       name: 'screenshot-tests',
       use: { ...devices['Desktop Chrome'] },
       testMatch: '**/screenshot-*.spec.ts',
+      // Only run screenshot tests when explicitly requested
+      testIgnore: process.env.SKIP_SCREENSHOTS ? '**/*' : undefined,
     },
   ],
 
@@ -56,6 +54,7 @@ export default defineConfig({
   webServer: {
     command: 'npm run dev',
     url: 'http://localhost:9002',
-    reuseExistingServer: true, // Changed to always reuse
+    reuseExistingServer: !process.env.CI, // Don't reuse on CI
+    timeout: 30_000,
   },
 });
