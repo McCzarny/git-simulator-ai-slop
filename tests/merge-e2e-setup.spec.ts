@@ -4,9 +4,6 @@ test('merge 139 to master - custom setup and strict verification', async ({ page
   await page.goto('http://localhost:9002');
   await page.waitForLoadState('networkidle');
 
-  // Włącz commit labels na czas testu
-  await page.evaluate(() => { (window as any).__SHOW_COMMIT_LABELS__ = true; });
-
   // Ustaw własny graf
   await page.evaluate(() => {
     const commits = {
